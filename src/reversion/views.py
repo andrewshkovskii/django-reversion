@@ -18,7 +18,7 @@ revision_list_template_title = u'Ревизии {0}'
 
 class RevisionsListView(ListView):
     context_object_name = 'revision_list'
-    template_name = 'ip_pbx_reversion/revision_list.html'
+    template_name = 'reversion/revision_list.html'
 
     def get_revisioned_object(self, request, *args, **kwargs):
         return self.model.objects.get(**kwargs)
@@ -33,7 +33,7 @@ class RevisionsListView(ListView):
             **kwargs)
 
 class RevisionRevertFormView(FormView):
-    template_name = "ip_pbx_reversion/revision_revert.html"
+    template_name = "reversion/revision_revert.html"
     form_class = Form
     back_url = None
     model = None
@@ -43,7 +43,7 @@ class RevisionRevertFormView(FormView):
             try:
                 revision = Revision.objects.get(pk = kwargs.get('pk'))
             except Revision.DoesNotExist:
-                return render_to_response("ip_pbx_reversion/revision_error.html",
+                return render_to_response("reversion/revision_error.html",
                         {'back_url' :  self.back_url, "error_message" : reversion_does_not_exist_message.format(kwargs.get('pk'))},
                     context_instance = RequestContext(request))
             else:
@@ -52,7 +52,7 @@ class RevisionRevertFormView(FormView):
                     verbose_name = self.model._meta.verbose_name,
                     back_url = self.back_url))
         else:
-            return render_to_response("ip_pbx_reversion/revision_error.html",
+            return render_to_response("reversion/revision_error.html",
                     {'back_url' :  self.back_url, "error_message":has_no_perm_message},
                 context_instance = RequestContext(request))
 
@@ -62,18 +62,18 @@ class RevisionRevertFormView(FormView):
                 revision = Revision.objects.get(pk = kwargs.get('pk'))
                 revision.revert()
                 reversion.set_comment(revision_revert_comment_template.format(revision.pk, _date(revision.date_created, "d E H:i:s"), revision.comment))
-                return render_to_response("ip_pbx_reversion/revision_revert_success.html",
+                return render_to_response("reversion/revision_revert_success.html",
                         {'back_url' : self.back_url, 'revision' : revision},
                     context_instance = RequestContext(request))
             except Revision.DoesNotExist:
-                return render_to_response("ip_pbx_reversion/revision_error.html",
+                return render_to_response("reversion/revision_error.html",
                         {'back_url' : self.back_url, "error_message": reversion_does_not_exist_message.format(kwargs.get('pk'))},
                     context_instance = RequestContext(request))
             except RevertError:
-                return render_to_response("ip_pbx_reversion/revision_error.html",
+                return render_to_response("reversion/revision_error.html",
                         {'back_url' : self.back_url, 'error_message' : integrity_error_message.format(kwargs.get('pk'))},
                     context_instance = RequestContext(request))
         else:
-            return render_to_response("ip_pbx_reversion/revision_error.html",
+            return render_to_response("reversion/revision_error.html",
                     {'back_url' : self.back_url, "error_message":has_no_perm_message},
                 context_instance = RequestContext(request))
