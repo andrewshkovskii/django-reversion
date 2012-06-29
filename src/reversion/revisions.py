@@ -1,4 +1,5 @@
 """Revision management for django-reversion."""
+# -*- coding: utf-8 -*-
 
 
 try:
@@ -9,18 +10,25 @@ except ImportError:
 import operator, sys
 from threading import local
 from weakref import WeakValueDictionary
-
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import Permission
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.signals import request_finished
 from django.db import models, DEFAULT_DB_ALIAS, connection
-from django.db.models import Q, Max
+from django.db.models import Q, Max, AutoField
+from django.db.models.fields.related import ManyToManyField, RelatedField
 from django.db.models.query import QuerySet
-from django.db.models.signals import post_save, pre_delete
-
+from django.db.models.signals import post_save, pre_delete, pre_save, post_delete
+from django.core.serializers import deserialize
+from django.contrib.contenttypes.models import ContentType
 from reversion.models import Revision, Version, VERSION_ADD, VERSION_CHANGE, VERSION_DELETE, has_int_pk, deprecated, pre_revision_commit, post_revision_commit
 
+was_changed_message = u'Был изменен {0}:'
+changes_template = u"\t- {verbose_name}: \"{value_from}\" -> \"{value_to}\""
+no_value_message = u'Нет значения.'
+saved_without_changes_message = u"Сохранен без изменений {0}."
+was_created_message = u'Был создан {0}.'
+was_deleted_message = u'Был удален {0}.'
 
 class VersionAdapter(object):
     
@@ -36,7 +44,7 @@ class VersionAdapter(object):
     follow = ()
     
     # The serialization format to use.
-    format = "json"
+    format = "yaml"
     
     def __init__(self, model):
         """Initializes the version adapter."""
@@ -135,6 +143,9 @@ class RevisionContextManager(local):
         self._meta = []
         self._ignore_duplicates = False
         self._db = None
+        self.deleted = []
+        self.updated = []
+        self.inserted = []
     
     def is_active(self):
         """Returns whether there is an active revision for this thread."""
@@ -267,6 +278,14 @@ class RevisionContextManager(local):
         """
         return RevisionContext(self, manage_manually)
 
+    def add_inserted(self, new_instance):
+        self.inserted.append(new_instance)
+
+    def add_deleted(self, deleted_instance):
+        self.deleted.append(deleted_instance)
+
+    def add_updated(self, serialized_instance):
+        self.updated.append(serialized_instance)
 
 class RevisionContext(object):
 
@@ -364,7 +383,7 @@ class RevisionManager(object):
         """Returns an iterable of all registered models."""
         return self._registered_models.keys()
         
-    def register(self, model, adapter_cls=VersionAdapter, **field_overrides):
+    def register(self, model, adapter_cls=VersionAdapter, smart_register = True, **field_overrides):
         """Registers a model with this revision manager."""
         # Prevent multiple registration.
         if self.is_registered(model):
@@ -381,7 +400,13 @@ class RevisionManager(object):
         # Connect to the post save signal of the model.
         post_save.connect(self._post_save_receiver, model)
         pre_delete.connect(self._pre_delete_receiver, model)
-    
+        if smart_register:
+            pre_save.connect(self.pre_save_smart_handler,sender = model)
+            post_delete.connect(self.post_delete_smart_handler, sender = model)
+            Permission.objects.get_or_create(codename='can_revert_{0}'.format(model.__name__),
+                                            name=u'Can revert {0}'.format(model.__name__),
+            content_type = ContentType.objects.get(app_label=model._meta.app_label.lower(), model=model.__name__.lower()))
+
     def get_adapter(self, model):
         """Returns the registration information for the given model class."""
         if self.is_registered(model):
@@ -395,6 +420,8 @@ class RevisionManager(object):
         del self._registered_models[model]
         post_save.disconnect(self._post_save_receiver, model)
         pre_delete.disconnect(self._pre_delete_receiver, model)
+        pre_save.disconnect(self.pre_save_smart_handler, model)
+        post_delete.disconnect(self.post_delete_smart_handler, model)
     
     def _follow_relationships(self, objects):
         """Follows all relationships in the given set of objects."""
@@ -454,6 +481,58 @@ class RevisionManager(object):
             # Only save if we're always saving, or have changes.
             if save_revision:                
                 # Save a new revision.
+                if not comment:
+                    deleted_comments, inserted_comments, updated_comments = [], [], []
+                    deleted, updated, inserted = self._revision_context_manager.deleted, self._revision_context_manager.updated, self._revision_context_manager.inserted
+                    for deleted_instance in deleted:
+                        if not (updated and inserted )and len(deleted) == 1:
+                            #we have only deleted one instance, so we need to created reversion after this instance was deleted
+                            #because revision will create revision for DELETED instances, we will create revision of follow chain after object was deleted
+                            adapter = self.get_adapter(deleted_instance.__class__)
+                            with self._revision_context_manager.create_revision(True):
+                                for followed in adapter.get_followed_relations(deleted_instance):
+                                    comment = was_changed_message.format(unicode(deleted_instance))
+                                    deleted_comments.append(comment)
+                                    default_revision_manager.save_revision(followed,
+                                                                            user=user,
+                                                                            comment=comment)
+                                    break
+                        deleted_comments.append(was_deleted_message.format(unicode(deleted_instance)))
+                    for inserted_instance in inserted:
+                        #here we must get the instances what was created
+                        inserted_comments.append(was_created_message.format(unicode(inserted_instance)))
+                    for serialized_updated_instance in updated:
+                        old_instance_deserialized = deserialize('yaml', serialized_updated_instance).next()
+                        new_instance = None
+                        change_list = []
+                        for instance in objects:
+                            if old_instance_deserialized.object.__class__ == instance.__class__ and old_instance_deserialized.object.pk == instance.pk :
+                                new_instance = instance
+                                break
+                        for field in sorted(new_instance._meta.fields + new_instance._meta.many_to_many, key = lambda x:x.creation_counter):
+                            old_value, new_value = field.value_from_object(old_instance_deserialized.object), field.value_from_object(new_instance)
+                            if not isinstance(field, (AutoField, ManyToManyField)):
+                                if old_value != new_value:
+                                    if isinstance(field, RelatedField):
+                                        change_list.append(changes_template.format(verbose_name = field.verbose_name,
+                                                                            value_from = no_value_message if not old_value else unicode(field.rel.to.objects.get(pk=old_value))
+                                                                            ,value_to = no_value_message if not new_value else unicode(field.rel.to.objects.get(pk=new_value))))
+                                    else:
+                                        change_list.append(changes_template.format(verbose_name = field.verbose_name,
+                                                                            value_from = old_value if old_value else no_value_message,
+                                                                            value_to =  new_value if new_value else no_value_message))
+                            elif isinstance(field, ManyToManyField):
+                                old_value = old_instance_deserialized.m2m_data[field.name]
+                                old_value = [int(pk) for pk in old_value] if old_value else old_value
+                                new_value = [obj.pk for obj in new_value] if new_value else new_value
+                                if old_value != new_value:
+                                    change_list.append(changes_template.format(verbose_name = field.verbose_name,
+                                                                            value_from = ', '.join(unicode(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in old_value) if old_value else no_value_message,
+                                                                            value_to =  ', '.join(unicode(obj) for obj in new_value) if new_value else no_value_message))
+                        if change_list:
+                            change_list.insert(0, was_changed_message.format(unicode(old_instance_deserialized.object)))
+                        inserted_comments.append(saved_without_changes_message.format(unicode(new_instance)) if not change_list else '\n'.join(change_list))
+                    comment = '\n'.join(inserted_comments+updated_comments+deleted_comments)
                 revision = Revision(
                     manager_slug = self._manager_slug,
                     user = user,
@@ -613,7 +692,7 @@ class RevisionManager(object):
         
     def _post_save_receiver(self, instance, created, **kwargs):
         """Adds registered models to the current revision, if any."""
-        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually():
+        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() and not kwargs['raw']:
             adapter = self.get_adapter(instance.__class__)
             if created:
                 version_data = lambda: adapter.get_version_data(instance, VERSION_ADD, self._revision_context_manager._db)
@@ -628,6 +707,15 @@ class RevisionManager(object):
             version_data = adapter.get_version_data(instance, VERSION_DELETE, self._revision_context_manager._db)
             self._revision_context_manager.add_to_context(self, instance, version_data)
 
-        
+    def post_delete_smart_handler(self, sender, instance, **kwrags):
+        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually():
+            self._revision_context_manager.add_deleted(instance)
+
+    def pre_save_smart_handler(self, sender, instance, **kwargs):
+        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() and not kwargs['raw']:
+            if instance.pk:
+                self._revision_context_manager.add_updated(self.get_adapter(instance.__class__).get_serialized_data(sender.objects.get(pk = instance.pk)))
+            else:
+                self._revision_context_manager.add_inserted(instance)
 # A shared revision manager.
 default_revision_manager = RevisionManager("default")
