@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% load url from future %}
+{% block title %} / Восстановление ревизии {% endblock %}
+{% block main_content_header %}Результат восстановления ревизии {% endblock %}
+{% block main_content_inner %}
+    <div class='alert alert-success'>
+    Ревизия #{{ revision.pk }} от <strong>{{ revision.date_created  }} ({{ revision.comment}})</strong> успешно восстановлена!
+    </div>
+    <a href="{% url back_url %}" class='btn btn-primary'>Вернутся к списку ревизий</a>
+{% endblock %}

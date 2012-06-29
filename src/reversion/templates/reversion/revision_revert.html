@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% load url from future %}
+{% load bootstrap_toolkit %}
+{% load static from staticfiles %}
+{% block title %} / Восстановление ревизии {{ verbose_name }} {% endblock %}
+{% block main_content_header %}Подтверждение восстановления ревизии {{ verbose_name }}{% endblock %}
+{% block main_content_inner %}
+
+    <form action="" method="post" class="form-horizontal" name="asterisk_revision_revert">
+        {% csrf_token %}
+        <p>Вы <strong>действительно</strong> хотите восстановить ревизию {{ verbose_name }} от <strong>{{ revision.date_created }} ({{ revision.comment }})</strong> ? </p>
+        {{ form|as_bootstrap}}
+        <input type="submit" class="btn btn-success" value="Да, восстановить">
+        &nbsp;<a class="btn btn-default" href="{% url back_url %}">Отмена</a>
+    </form>
+
+{% endblock %}
