@@ -444,7 +444,7 @@ class RevisionManager(object):
             revision__manager_slug = self._manager_slug,
         ).select_related("revision")
         
-    def save_revision(self, objects, ignore_duplicates=False, user=None, comment="", meta=(), db=None):
+    def save_revision(self, objects, ignore_duplicates=False, user=None, comment="", smart=True, meta=(), db=None):
         """Saves a new revision."""
         # Get the db alias.
         db = db or DEFAULT_DB_ALIAS
@@ -479,25 +479,23 @@ class RevisionManager(object):
                         if sorted(previous_versions) == sorted(all_serialized_data):
                             save_revision = False
             # Only save if we're always saving, or have changes.
-            if save_revision:                
+            if save_revision:
                 # Save a new revision.
-                if not comment:
+                if not comment and smart:
                     deleted_comments, inserted_comments, updated_comments = [], [], []
                     deleted, updated, inserted = self._revision_context_manager.deleted, self._revision_context_manager.updated, self._revision_context_manager.inserted
                     for deleted_instance in deleted:
-                        if not (updated and inserted )and len(deleted) == 1:
+                        comment_ = was_deleted_message.format(unicode(deleted_instance))
+                        deleted_comments.append(comment_)
+                        if not (updated and inserted) and len(deleted) == 1:
                             #we have only deleted one instance, so we need to created reversion after this instance was deleted
                             #because revision will create revision for DELETED instances, we will create revision of follow chain after object was deleted
                             adapter = self.get_adapter(deleted_instance.__class__)
-                            with self._revision_context_manager.create_revision(True):
-                                for followed in adapter.get_followed_relations(deleted_instance):
-                                    comment = was_changed_message.format(unicode(deleted_instance))
-                                    deleted_comments.append(comment)
-                                    default_revision_manager.save_revision(followed,
-                                                                            user=user,
-                                                                            comment=comment)
-                                    break
-                        deleted_comments.append(was_deleted_message.format(unicode(deleted_instance)))
+                            for followed in adapter.get_followed_relations(deleted_instance):
+                                default_revision_manager.save_revision([followed],
+                                    user=user,
+                                    comment=comment_, smart=False)
+                                break
                     for inserted_instance in inserted:
                         #here we must get the instances what was created
                         inserted_comments.append(was_created_message.format(unicode(inserted_instance)))
@@ -692,7 +690,7 @@ class RevisionManager(object):
         
     def _post_save_receiver(self, instance, created, **kwargs):
         """Adds registered models to the current revision, if any."""
-        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() and not kwargs['raw']:
+        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() :
             adapter = self.get_adapter(instance.__class__)
             if created:
                 version_data = lambda: adapter.get_version_data(instance, VERSION_ADD, self._revision_context_manager._db)
