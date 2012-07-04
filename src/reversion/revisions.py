@@ -526,7 +526,7 @@ class RevisionManager(object):
                                 if old_value != new_value:
                                     change_list.append(changes_template.format(verbose_name = field.verbose_name,
                                                                             value_from = ', '.join(unicode(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in old_value) if old_value else no_value_message,
-                                                                            value_to =  ', '.join(unicode(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in new_value) if old_value else no_value_message))
+                                                                            value_to =  ', '.join(unicode(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in new_value) if new_value else no_value_message))
                         if change_list:
                             change_list.insert(0, was_changed_message.format(unicode(old_instance_deserialized.object)))
                         inserted_comments.append(saved_without_changes_message.format(unicode(new_instance)) if not change_list else '\n'.join(change_list))
