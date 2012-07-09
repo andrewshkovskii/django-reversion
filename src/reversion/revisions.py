@@ -1,7 +1,5 @@
 """Revision management for django-reversion."""
 # -*- coding: utf-8 -*-
-
-
 try:
     from functools import wraps
 except ImportError:
@@ -397,15 +395,15 @@ class RevisionManager(object):
         # Perform the registration.
         adapter_obj = adapter_cls(model)
         self._registered_models[model] = adapter_obj
-        # Connect to the post save signal of the model.
+#        Connect to the post save signal of the model.
         post_save.connect(self._post_save_receiver, model)
         pre_delete.connect(self._pre_delete_receiver, model)
-        if smart_register:
+        if smart_register and 'django_content_type' in connection.introspection.table_names():
             pre_save.connect(self.pre_save_smart_handler,sender = model)
             post_delete.connect(self.post_delete_smart_handler, sender = model)
             Permission.objects.get_or_create(codename='can_revert_{0}'.format(model.__name__),
-                                            name=u'Can revert {0}'.format(model.__name__),
-            content_type = ContentType.objects.get(app_label=model._meta.app_label.lower(), model=model.__name__.lower()))
+                                             name=u'Can revert {0}'.format(model.__name__),
+                                             content_type = ContentType.objects.get_or_create(name = model._meta.verbose_name ,app_label = model._meta.app_label.lower(), model=model.__name__.lower()))
 
     def get_adapter(self, model):
         """Returns the registration information for the given model class."""
@@ -487,15 +485,15 @@ class RevisionManager(object):
                     for deleted_instance in deleted:
                         comment_ = was_deleted_message.format(unicode(deleted_instance))
                         deleted_comments.append(comment_)
-                        if not (updated and inserted) and len(deleted) == 1:
-                            #we have only deleted one instance, so we need to created reversion after this instance was deleted
-                            #because revision will create revision for DELETED instances, we will create revision of follow chain after object was deleted
-                            adapter = self.get_adapter(deleted_instance.__class__)
-                            for followed in adapter.get_followed_relations(deleted_instance):
-                                default_revision_manager.save_revision([followed],
-                                    user=user,
-                                    comment=comment_, smart=False)
-                                break
+                        #because revision will create revision for DELETED instances, we need to  create revision of follow chain after object was deleted
+                        adapter = self.get_adapter(deleted_instance.__class__)
+                        for followed in adapter.get_followed_relations(deleted_instance):
+                            default_revision_manager.save_revision([followed],
+                                                                    user=user,
+                                                                    comment=comment_,
+                                                                    smart=False,
+                                                                    ignore_duplicates=True)
+                            break
                     for inserted_instance in inserted:
                         #here we must get the instances what was created
                         inserted_comments.append(was_created_message.format(unicode(inserted_instance)))
@@ -534,6 +532,7 @@ class RevisionManager(object):
                 revision = Revision(
                     manager_slug = self._manager_slug,
                     user = user,
+                    user_string = "{0} {1} ({2})".format(user.last_name, user.first_name, user.user_name) if user else "",
                     comment = comment,
                 )
                 # Send the pre_revision_commit signal.

@@ -73,6 +73,12 @@ class Revision(models.Model):
                              null=True,
                              verbose_name=_("user"),
                              help_text="The user who created this revision.")
+
+    user_string = models.CharField(max_length=100,
+                            blank=True,
+                            null=True,
+                            verbose_name=("user"),
+                            help_text="The user first name, last name and login who created this revision.")
     
     comment = models.TextField(blank=True,
                                verbose_name=_("comment"),
@@ -103,7 +109,9 @@ class Revision(models.Model):
                 else:
                     item.delete()
         # Attempt to revert all revisions.
-        safe_revert([version for version in version_set if version.type != VERSION_DELETE])
+        versions = [version for version in version_set if version.type != VERSION_DELETE]
+        safe_revert(versions)
+        reverted.send(self, intances = versions)
         
     def __unicode__(self):
         """Returns a unicode representation."""
@@ -309,7 +317,7 @@ class Version(models.Model):
 # Version management signals.
 pre_revision_commit = Signal(providing_args=["instances", "revision", "versions"])
 post_revision_commit = Signal(providing_args=["instances", "revision", "versions"])
-    
+reverted = Signal(providing_args=['versions','revision'])
 
 def check_for_receivers(sender, sending_signal, **kwargs):
     """Checks that no other signal receivers have been connected."""
