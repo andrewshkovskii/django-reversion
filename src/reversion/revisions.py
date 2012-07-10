@@ -403,7 +403,7 @@ class RevisionManager(object):
             post_delete.connect(self.post_delete_smart_handler, sender = model)
             Permission.objects.get_or_create(codename='can_revert_{0}'.format(model.__name__),
                                              name=u'Can revert {0}'.format(model.__name__),
-                                             content_type = ContentType.objects.get(app_label = model._meta.app_label.lower(), model=model.__name__.lower()))
+                                             content_type = ContentType.objects.get(ƒusapp_label = model._meta.app_label.lower(), model=model.__name__.lower()))
 
     def get_adapter(self, model):
         """Returns the registration information for the given model class."""
@@ -532,7 +532,7 @@ class RevisionManager(object):
                 revision = Revision(
                     manager_slug = self._manager_slug,
                     user = user,
-                    user_string = "{0} {1} ({2})".format(user.last_name, user.first_name, user.user_name) if user else "",
+                    user_string = "{0} {1} ({2})".format(user.last_name, user.first_name, user.username) if user else "",
                     comment = comment,
                 )
                 # Send the pre_revision_commit signal.
