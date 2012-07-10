@@ -10,8 +10,10 @@
         {% csrf_token %}
         <p>Вы <strong>действительно</strong> хотите восстановить ревизию {{ verbose_name }} от <strong>{{ revision.date_created }} ({{ revision.comment }})</strong> ? </p>
         {{ form|as_bootstrap}}
-        <input type="submit" class="btn btn-success" value="Да, восстановить">
-        &nbsp;<a class="btn btn-default" href="{% url back_url %}">Отмена</a>
+        <div class="form-actions">
+            <input type="submit" class="btn btn-success" value="Да, восстановить">
+            &nbsp;<a class="btn btn-default" href="{% url back_url %}">Отмена</a>
+        </div>
     </form>
 
 {% endblock %}
