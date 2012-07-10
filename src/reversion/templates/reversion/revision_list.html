@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "asterisk/asterisk.html" %}
 {% load static from staticfiles %}
 {% block title %} {{ model_verbose_name }} / {{ template_title }} {% endblock %}
 {% block main_content_header %}{{ template_title }}{% endblock %}
@@ -18,7 +18,7 @@
             <tr>
                 <td> {{ revision_entry.id }}</td>
                 <td> {{ revision_entry.date_created }}</td>
-                <td> {{ revision_entry.user.username }}</td>
+                <td> {{ revision_entry.user_string }}</td>
                 <td class='revision-comment' title="{{ revision_entry.comment }}"> {{ revision_entry.comment|truncatechars:50  }}</td>
                 <td>
                     {% if not forloop.first	 %}
