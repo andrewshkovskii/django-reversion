@@ -398,7 +398,7 @@ class RevisionManager(object):
 #        Connect to the post save signal of the model.
         post_save.connect(self._post_save_receiver, model)
         pre_delete.connect(self._pre_delete_receiver, model)
-        if smart_register and 'django_content_type' in connection.introspection.table_names():
+        if smart_register:
             pre_save.connect(self.pre_save_smart_handler,sender = model)
             post_delete.connect(self.post_delete_smart_handler, sender = model)
             Permission.objects.get_or_create(codename='can_revert_{0}'.format(model.__name__),
