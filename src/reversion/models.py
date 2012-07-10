@@ -317,7 +317,7 @@ class Version(models.Model):
 # Version management signals.
 pre_revision_commit = Signal(providing_args=["instances", "revision", "versions"])
 post_revision_commit = Signal(providing_args=["instances", "revision", "versions"])
-reverted = Signal(providing_args=['versions','revision'])
+reverted = Signal(providing_args=['instances','revision'])
 
 def check_for_receivers(sender, sending_signal, **kwargs):
     """Checks that no other signal receivers have been connected."""
