@@ -10,7 +10,7 @@ import django, warnings
 
 from reversion.revisions import default_revision_manager, revision_context_manager, VersionAdapter
 from reversion.admin import VersionAdmin
-from reversion.models import pre_revision_commit, post_revision_commit
+from reversion.models import pre_revision_commit, post_revision_commit, reverted
 from reversion.version import __version__ 
 from reversion.views import RevisionsListView, RevisionRevertFormView, ReversionDeleteMixin
 
