@@ -28,6 +28,9 @@ saved_without_changes_message = u"Сохранен без изменений {0}
 was_created_message = u'Был создан {0}.'
 was_deleted_message = u'Был удален {0}.'
 
+def get_object_smart_repr(object):
+    return "{0} {1}".format(object._meta.verbose_name, unicode(object))
+
 class VersionAdapter(object):
     
     """Adapter class for serializing a registered model."""
@@ -483,20 +486,10 @@ class RevisionManager(object):
                     deleted_comments, inserted_comments, updated_comments = [], [], []
                     deleted, updated, inserted = self._revision_context_manager.deleted, self._revision_context_manager.updated, self._revision_context_manager.inserted
                     for deleted_instance in deleted:
-                        comment_ = was_deleted_message.format(unicode(deleted_instance))
-                        deleted_comments.append(comment_)
-                        #because revision will create revision for DELETED instances, we need to  create revision of follow chain after object was deleted
-                        adapter = self.get_adapter(deleted_instance.__class__)
-                        for followed in adapter.get_followed_relations(deleted_instance):
-                            default_revision_manager.save_revision([followed],
-                                                                    user=user,
-                                                                    comment=comment_,
-                                                                    smart=False,
-                                                                    ignore_duplicates=True)
-                            break
+                        deleted_comments.append(was_deleted_message.format(get_object_smart_repr(deleted_instance)))
                     for inserted_instance in inserted:
                         #here we must get the instances what was created
-                        inserted_comments.append(was_created_message.format(unicode(inserted_instance)))
+                        inserted_comments.append(was_created_message.format(get_object_smart_repr(inserted_instance)))
                     for serialized_updated_instance in updated:
                         old_instance_deserialized = deserialize('yaml', serialized_updated_instance).next()
                         new_instance = None
@@ -511,8 +504,8 @@ class RevisionManager(object):
                                 if old_value != new_value:
                                     if isinstance(field, RelatedField):
                                         change_list.append(changes_template.format(verbose_name = field.verbose_name,
-                                                                            value_from = no_value_message if not old_value else unicode(field.rel.to.objects.get(pk=old_value))
-                                                                            ,value_to = no_value_message if not new_value else unicode(field.rel.to.objects.get(pk=new_value))))
+                                                                            value_from = no_value_message if not old_value else get_object_smart_repr(field.rel.to.objects.get(pk=old_value))
+                                                                            ,value_to = no_value_message if not new_value else get_object_smart_repr(field.rel.to.objects.get(pk=new_value))))
                                     else:
                                         change_list.append(changes_template.format(verbose_name = field.verbose_name,
                                                                             value_from = old_value if old_value else no_value_message,
@@ -523,11 +516,11 @@ class RevisionManager(object):
                                 new_value = [obj.pk for obj in new_value] if new_value else new_value
                                 if old_value != new_value:
                                     change_list.append(changes_template.format(verbose_name = field.verbose_name,
-                                                                            value_from = ', '.join(unicode(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in old_value) if old_value else no_value_message,
-                                                                            value_to =  ', '.join(unicode(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in new_value) if new_value else no_value_message))
+                                                                            value_from = ', '.join(get_object_smart_repr(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in old_value) if old_value else no_value_message,
+                                                                            value_to =  ', '.join(get_object_smart_repr(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in new_value) if new_value else no_value_message))
                         if change_list:
-                            change_list.insert(0, was_changed_message.format(unicode(old_instance_deserialized.object)))
-                        inserted_comments.append(saved_without_changes_message.format(unicode(new_instance)) if not change_list else '\n'.join(change_list))
+                            change_list.insert(0, was_changed_message.format(get_object_smart_repr(old_instance_deserialized.object)))
+                        inserted_comments.append(saved_without_changes_message.format(get_object_smart_repr(new_instance)) if not change_list else '\n'.join(change_list))
                     comment = '\n'.join(inserted_comments+updated_comments+deleted_comments)
                 revision = Revision(
                     manager_slug = self._manager_slug,
@@ -714,5 +707,6 @@ class RevisionManager(object):
                 self._revision_context_manager.add_updated(self.get_adapter(instance.__class__).get_serialized_data(sender.objects.get(pk = instance.pk)))
             else:
                 self._revision_context_manager.add_inserted(instance)
+
 # A shared revision manager.
 default_revision_manager = RevisionManager("default")

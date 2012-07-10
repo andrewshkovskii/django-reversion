@@ -2,13 +2,13 @@
 __author__ = 'Andrewshkovskii'
 
 from django.forms.forms import Form
-from django.views.generic import ListView, FormView
+from django.views.generic import ListView, FormView, DeleteView
 from django.shortcuts import  render_to_response
 from django.template.defaultfilters import date as _date
 from django.template.context import RequestContext
 from reversion.models import Revision, RevertError
+from reversion.revisions import was_deleted_message, get_object_smart_repr
 import reversion
-
 
 reversion_does_not_exist_message = u"Ревизия <strong>#{0}</strong> не существует!"
 integrity_error_message = u"При попытке восстановить ревизию {0} произошла ошибка целостности БД."
@@ -77,3 +77,18 @@ class RevisionRevertFormView(FormView):
             return render_to_response("reversion/revision_error.html",
                     {'back_url' : self.back_url, "error_message":has_no_perm_message},
                 context_instance = RequestContext(request))
+
+
+class ReversionDeleteMixin(DeleteView):
+
+    def get_follow_chain_head(self):
+        raise NotImplementedError
+
+    def create_revision_after_delete(self, comment = None):
+        with reversion.create_revision(manage_manually=True):
+            reversion.default_revision_manager.save_revision([self.get_follow_chain_head()], comment=comment if comment else was_deleted_message.format(get_object_smart_repr(self.object)), user = self.request.user)
+
+    def delete(self, request, *args, **kwargs):
+        delete = super(ReversionDeleteMixin, self).delete(request, *args, **kwargs)
+        self.create_revision_after_delete()
+        return delete
