@@ -111,7 +111,7 @@ class Revision(models.Model):
         # Attempt to revert all revisions.
         versions = [version for version in version_set if version.type != VERSION_DELETE]
         safe_revert(versions)
-        reverted.send(self, intances = versions)
+        reverted.send(sender=self, revision = self, versions = versions)
         
     def __unicode__(self):
         """Returns a unicode representation."""
@@ -317,7 +317,7 @@ class Version(models.Model):
 # Version management signals.
 pre_revision_commit = Signal(providing_args=["instances", "revision", "versions"])
 post_revision_commit = Signal(providing_args=["instances", "revision", "versions"])
-reverted = Signal(providing_args=['instances','revision'])
+reverted = Signal(providing_args=['revision', 'versions'])
 
 def check_for_receivers(sender, sending_signal, **kwargs):
     """Checks that no other signal receivers have been connected."""

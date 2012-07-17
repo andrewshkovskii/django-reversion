@@ -21,15 +21,15 @@ from django.core.serializers import deserialize
 from django.contrib.contenttypes.models import ContentType
 from reversion.models import Revision, Version, VERSION_ADD, VERSION_CHANGE, VERSION_DELETE, has_int_pk, deprecated, pre_revision_commit, post_revision_commit
 
-was_changed_message = u'Был изменен {0}:'
+was_changed_message = u'Изменен {0}:'
 changes_template = u"\t- {verbose_name}: \"{value_from}\" -> \"{value_to}\""
 no_value_message = u'Нет значения.'
 saved_without_changes_message = u"Сохранен без изменений {0}."
-was_created_message = u'Был создан {0}.'
-was_deleted_message = u'Был удален {0}.'
+was_created_message = u'Создан {0}.'
+was_deleted_message = u'Удален {0}.'
 
 def get_object_smart_repr(object):
-    return "{0} {1}".format(object._meta.verbose_name, unicode(object))
+    return u"{0} {1}".format(unicode(object._meta.verbose_name), unicode(object))
 
 class VersionAdapter(object):
     
