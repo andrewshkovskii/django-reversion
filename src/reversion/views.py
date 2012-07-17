@@ -19,7 +19,7 @@ revision_list_template_title = u'Ревизии {0}'
 class RevisionsListView(ListView):
     context_object_name = 'revision_list'
     template_name = 'reversion/revision_list.html'
-
+#TODO: title for template
     def get_revisioned_object(self, request, *args, **kwargs):
         return self.model.objects.get(**kwargs)
 
@@ -29,8 +29,8 @@ class RevisionsListView(ListView):
 
     def get_context_data(self, **kwargs):
         return super(RevisionsListView, self).get_context_data(template_title = revision_list_template_title.format(self.model._meta.verbose_name_plural),
-            model_verbose_name = self.model._meta.verbose_name,
-            **kwargs)
+                                                                model_verbose_name = self.model._meta.verbose_name,
+                                                                **kwargs)
 
 class RevisionRevertFormView(FormView):
     template_name = "reversion/revision_revert.html"
