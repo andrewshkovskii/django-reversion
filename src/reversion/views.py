@@ -22,7 +22,7 @@ revision_list_template_title = u'Ревизии {0}'
 class RevisionsListView(ListView):
     context_object_name = 'revision_list'
     template_name = 'reversion/revision_list.html'
-    template_title = None
+    template_header = None
 
     def get_revisioned_object(self, request, *args, **kwargs):
         return self.model.objects.get(**kwargs)
@@ -32,19 +32,19 @@ class RevisionsListView(ListView):
         return self.render_to_response(self.get_context_data(object_list=self.object_list))
 
     def get_context_data(self, **kwargs):
-        return super(RevisionsListView, self).get_context_data(template_title = revision_list_template_title.format(self.model._meta.verbose_name_plural) if not self.template_title else self.template_name,
+        return super(RevisionsListView, self).get_context_data(template_header = revision_list_template_title.format(self.model._meta.verbose_name_plural) if not self.template_header else self.template_header,
                                                                 model_verbose_name = self.model._meta.verbose_name,
                                                                 **kwargs)
 
 class CanRevertRevisionMixin(SingleObjectMixin):
     path_to_owner = None
 
-    def get_owner_from_user(self):
+    def get_owner_from_request(self):
         return self.request.user
 
     def user_can_access_to_revision(self, object):
         if self.path_to_owner:
-            return self.model.objects.filter(**{'pk' : object.pk, self.path_to_owner : self.get_owner_from_user()}).exists()
+            return self.model.objects.filter(**{'pk' : object.pk, self.path_to_owner : self.get_owner_from_request()}).exists()
         else:
             raise ImproperlyConfigured('No path to owner provided. Please, provide path to object owner')
 

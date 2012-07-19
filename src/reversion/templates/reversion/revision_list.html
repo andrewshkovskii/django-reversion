@@ -1,7 +1,7 @@
 {% extends "asterisk/asterisk.html" %}
 {% load static from staticfiles %}
-{% block title %} {{ model_verbose_name }} / {{ template_title }} {% endblock %}
-{% block main_content_header %}{{ template_title }}{% endblock %}
+{% block title %} {{ model_verbose_name }} / {{ template_header }} {% endblock %}
+{% block main_content_header %}{{ template_header }}{% endblock %}
 {% block main_content_inner %}
     <table class="table table-stripper datatables_target">
         <thead>
