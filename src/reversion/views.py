@@ -3,9 +3,12 @@ __author__ = 'Andrewshkovskii'
 
 from django.forms.forms import Form
 from django.views.generic import ListView, FormView, DeleteView
+from django.views.generic.detail import SingleObjectMixin
 from django.shortcuts import  render_to_response
 from django.template.defaultfilters import date as _date
 from django.template.context import RequestContext
+from django.core.exceptions import ImproperlyConfigured
+from django.http import Http404
 from reversion.models import Revision, RevertError
 from reversion.revisions import was_deleted_message, get_object_smart_repr
 import reversion
@@ -19,7 +22,8 @@ revision_list_template_title = u'Ревизии {0}'
 class RevisionsListView(ListView):
     context_object_name = 'revision_list'
     template_name = 'reversion/revision_list.html'
-#TODO: title for template
+    template_title = None
+
     def get_revisioned_object(self, request, *args, **kwargs):
         return self.model.objects.get(**kwargs)
 
@@ -28,55 +32,77 @@ class RevisionsListView(ListView):
         return self.render_to_response(self.get_context_data(object_list=self.object_list))
 
     def get_context_data(self, **kwargs):
-        return super(RevisionsListView, self).get_context_data(template_title = revision_list_template_title.format(self.model._meta.verbose_name_plural),
+        return super(RevisionsListView, self).get_context_data(template_title = revision_list_template_title.format(self.model._meta.verbose_name_plural) if not self.template_title else self.template_name,
                                                                 model_verbose_name = self.model._meta.verbose_name,
                                                                 **kwargs)
 
-class RevisionRevertFormView(FormView):
+class CanRevertRevisionMixin(SingleObjectMixin):
+    path_to_owner = None
+
+    def get_owner_from_user(self):
+        return self.request.user
+
+    def user_can_access_to_revision(self, object):
+        if self.path_to_owner:
+            return self.model.objects.filter(**{'pk' : object.pk, self.path_to_owner : self.get_owner_from_user()}).exists()
+        else:
+            raise ImproperlyConfigured('No path to owner provided. Please, provide path to object owner')
+
+    def get_object(self, queryset=None):
+        o = super(CanRevertRevisionMixin, self).get_object(queryset=queryset)
+        if self.user_can_access_to_revision(o):
+            return o
+        else:
+            raise Http404()
+
+class RevisionRevertFormView(FormView, CanRevertRevisionMixin):
     template_name = "reversion/revision_revert.html"
     form_class = Form
     back_url = None
-    model = None
+    model = Revision
+    model_on_revision = None
 
     def get(self, request, *args, **kwargs):
-        if request.user.has_perm("{0}.can_revert_{1}".format(self.model._meta.app_label, self.model.__name__)):
+        if request.user.has_perm("{0}.can_revert_{1}".format(self.model_on_revision._meta.app_label, self.model_on_revision.__name__)):
             try:
-                revision = Revision.objects.get(pk = kwargs.get('pk'))
+                self.object = self.get_object()
             except Revision.DoesNotExist:
                 return render_to_response("reversion/revision_error.html",
-                        {'back_url' :  self.back_url, "error_message" : reversion_does_not_exist_message.format(kwargs.get('pk'))},
-                    context_instance = RequestContext(request))
+                        {'back_url' :  self.back_url, 
+                         "error_message" : reversion_does_not_exist_message.format(kwargs.get('pk'))},
+                         context_instance = RequestContext(request))
             else:
-                return self.render_to_response(self.get_context_data(revision = revision,
+                return self.render_to_response(self.get_context_data(revision = self.object,
                     form = self.form_class(),
-                    verbose_name = self.model._meta.verbose_name,
+                    verbose_name = self.model_on_revision._meta.verbose_name,
                     back_url = self.back_url))
         else:
             return render_to_response("reversion/revision_error.html",
-                    {'back_url' :  self.back_url, "error_message":has_no_perm_message},
-                context_instance = RequestContext(request))
+                                        {'back_url' :  self.back_url, "error_message":has_no_perm_message},
+                                        context_instance = RequestContext(request))
 
     def post(self, request, *args, **kwargs):
-        if request.user.has_perm("{0}.can_revert_{1}".format(self.model._meta.app_label, self.model.__name__)):
+        if request.user.has_perm("{0}.can_revert_{1}".format(self.model_on_revision._meta.app_label, self.model_on_revision.__name__)):
             try:
-                revision = Revision.objects.get(pk = kwargs.get('pk'))
-                revision.revert()
-                reversion.set_comment(revision_revert_comment_template.format(revision.pk, _date(revision.date_created, "d E H:i:s"), revision.comment))
+                self.object = self.get_object()
+                self.object.revert()
+                reversion.set_comment(revision_revert_comment_template.format(self.object.pk, _date(self.object.date_created, "d E H:i:s"), self.object.comment))
                 return render_to_response("reversion/revision_revert_success.html",
-                        {'back_url' : self.back_url, 'revision' : revision},
+                                        {'back_url' : self.back_url, 'revision' : self.object},
                     context_instance = RequestContext(request))
             except Revision.DoesNotExist:
                 return render_to_response("reversion/revision_error.html",
-                        {'back_url' : self.back_url, "error_message": reversion_does_not_exist_message.format(kwargs.get('pk'))},
+                                            {'back_url' : self.back_url, 
+                                            "error_message": reversion_does_not_exist_message.format(kwargs.get('pk'))},
                     context_instance = RequestContext(request))
             except RevertError:
                 return render_to_response("reversion/revision_error.html",
-                        {'back_url' : self.back_url, 'error_message' : integrity_error_message.format(kwargs.get('pk'))},
-                    context_instance = RequestContext(request))
+                                            {'back_url' : self.back_url, 'error_message' : integrity_error_message.format(kwargs.get('pk'))},
+                                            context_instance = RequestContext(request))
         else:
             return render_to_response("reversion/revision_error.html",
-                    {'back_url' : self.back_url, "error_message":has_no_perm_message},
-                context_instance = RequestContext(request))
+                                    {'back_url' : self.back_url, "error_message":has_no_perm_message},
+                                    context_instance = RequestContext(request))
 
 
 class ReversionDeleteMixin(DeleteView):
