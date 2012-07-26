@@ -17,9 +17,11 @@ from django.db.models import Q, Max, AutoField
 from django.db.models.fields.related import ManyToManyField, RelatedField
 from django.db.models.query import QuerySet
 from django.db.models.signals import post_save, pre_delete, pre_save, post_delete
-from django.core.serializers import deserialize
+from django.core.serializers import deserialize, register_serializer
 from django.contrib.contenttypes.models import ContentType
 from reversion.models import Revision, Version, VERSION_ADD, VERSION_CHANGE, VERSION_DELETE, has_int_pk, deprecated, pre_revision_commit, post_revision_commit
+
+register_serializer('yaml_custom_m2m', "reversion.serializer.yaml_serializer_custom")
 
 was_changed_message = u'Изменен {0}:'
 changes_template = u"\t- {verbose_name}: \"{value_from}\" -> \"{value_to}\""
@@ -32,7 +34,7 @@ def get_object_smart_repr(object):
     return u"{0} {1}".format(unicode(object._meta.verbose_name), unicode(object))
 
 class VersionAdapter(object):
-    
+
     """Adapter class for serializing a registered model."""
     
     # Fields to include in the serialized data.
@@ -45,7 +47,7 @@ class VersionAdapter(object):
     follow = ()
     
     # The serialization format to use.
-    format = "yaml"
+    format = "yaml_custom_m2m"
     
     def __init__(self, model):
         """Initializes the version adapter."""
@@ -491,7 +493,7 @@ class RevisionManager(object):
                         #here we must get the instances what was created
                         inserted_comments.append(was_created_message.format(get_object_smart_repr(inserted_instance)))
                     for serialized_updated_instance in updated:
-                        old_instance_deserialized = deserialize('yaml', serialized_updated_instance).next()
+                        old_instance_deserialized = deserialize(VersionAdapter.format, serialized_updated_instance).next()
                         new_instance = None
                         change_list = []
                         for instance in objects:
