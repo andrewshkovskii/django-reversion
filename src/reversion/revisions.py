@@ -110,13 +110,18 @@ class VersionAdapter(object):
             object_id_int = int(obj.pk)
         else:
             object_id_int = None
+        object_repr = None
+        try:
+            object_repr = unicode(obj)
+        except :
+            object_repr = u"Error occurred while unicoding object"
         return {
             "object_id": object_id,
             "object_id_int": object_id_int,
             "content_type": content_type,
             "format": self.get_serialization_format(),
             "serialized_data": self.get_serialized_data(obj),
-            "object_repr": unicode(obj),
+            "object_repr": object_repr,
             "type": type_flag
         }
 
@@ -425,11 +430,13 @@ class RevisionManager(object):
         pre_delete.disconnect(self._pre_delete_receiver, model)
         pre_save.disconnect(self.pre_save_smart_handler, model)
         post_delete.disconnect(self.post_delete_smart_handler, model)
-    
+
     def _follow_relationships(self, objects):
         """Follows all relationships in the given set of objects."""
         followed = set()
         def _follow(obj):
+            if obj in followed or obj.pk is None:
+                return
             followed.add(obj)
             adapter = self.get_adapter(obj.__class__)
             for related in adapter.get_followed_relations(obj):
@@ -437,7 +444,7 @@ class RevisionManager(object):
         for obj in objects:
             _follow(obj)
         return followed
-    
+
     def _get_versions(self, db=None):
         """Returns all versions that apply to this manager."""
         db = db or DEFAULT_DB_ALIAS
@@ -525,7 +532,7 @@ class RevisionManager(object):
                 revision = Revision(
                     manager_slug = self._manager_slug,
                     user = user,
-                    user_string = "{0} {1} ({2})".format(user.last_name, user.first_name, user.username) if user else "",
+                    user_string = u"{0} {1} ({2})".format(user.last_name, user.first_name, user.username) if user else "",
                     comment = comment,
                 )
                 # Send the pre_revision_commit signal.
