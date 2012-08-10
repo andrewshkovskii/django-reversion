@@ -31,7 +31,7 @@ was_created_message = u'Создан {0}.'
 was_deleted_message = u'Удален {0}.'
 
 def get_object_smart_repr(object):
-    return u"{0} {1}".format(unicode(object._meta.verbose_name), unicode(object))
+    return u"{0} {1}".format(unicode(object._meta.verbose_name.capitalize()), unicode(object))
 
 class VersionAdapter(object):
 
@@ -47,7 +47,7 @@ class VersionAdapter(object):
     follow = ()
     
     # The serialization format to use.
-    format = "yaml_custom_m2m"
+    format = "yaml"
     
     def __init__(self, model):
         """Initializes the version adapter."""
@@ -93,10 +93,10 @@ class VersionAdapter(object):
         """Returns the serialization format to use."""
         return self.format
         
-    def get_serialized_data(self, obj):
+    def get_serialized_data(self, obj, format = None):
         """Returns a string of serialized data for the given obj."""
         return serializers.serialize(
-            self.get_serialization_format(),
+            self.get_serialization_format() if not format else format ,
             (obj,),
             fields = list(self.get_fields_to_serialize()),
         )
@@ -430,8 +430,6 @@ class RevisionManager(object):
         """Follows all relationships in the given set of objects."""
         followed = set()
         def _follow(obj):
-            if obj in followed or obj.pk is None:
-                return
             followed.add(obj)
             adapter = self.get_adapter(obj.__class__)
             for related in adapter.get_followed_relations(obj):
@@ -706,7 +704,7 @@ class RevisionManager(object):
     def pre_save_smart_handler(self, sender, instance, **kwargs):
         if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() and not kwargs['raw']:
             if instance.pk:
-                self._revision_context_manager.add_updated(self.get_adapter(instance.__class__).get_serialized_data(sender.objects.get(pk = instance.pk)))
+                self._revision_context_manager.add_updated(self.get_adapter(instance.__class__).get_serialized_data(sender.objects.get(pk = instance.pk), 'yaml_custom_m2m'))
             else:
                 self._revision_context_manager.add_inserted(instance)
 

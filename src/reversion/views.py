@@ -85,7 +85,7 @@ class RevisionRevertFormView(FormView, CanRevertRevisionMixin):
         if request.user.has_perm("{0}.can_revert_{1}".format(self.model_on_revision._meta.app_label, self.model_on_revision.__name__)):
             try:
                 self.object = self.get_object()
-                self.object.revert()
+                self.object.revert(delete=True)
                 reversion.set_comment(revision_revert_comment_template.format(self.object.pk, _date(self.object.date_created, "d E H:i:s"), self.object.comment))
                 return render_to_response("reversion/revision_revert_success.html",
                                         {'back_url' : self.back_url, 'revision' : self.object},
