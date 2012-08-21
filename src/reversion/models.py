@@ -103,11 +103,15 @@ class Revision(models.Model):
             current_revision = RevisionManager.get_manager(self.manager_slug)._follow_relationships(obj for obj in old_revision.keys() if obj is not None)
             # Delete objects that are no longer in the current revision.
             for item in current_revision:
-                if item in old_revision:
-                    if old_revision[item].type == VERSION_DELETE:
-                        item.delete()
-                else:
-                    item.delete()
+                if item._get_pk_val():
+                    try:
+                        if item in old_revision:
+                            if old_revision[item].type == VERSION_DELETE:
+                                item.delete()
+                        else:
+                            item.delete()
+                    except ObjectDoesNotExist, AssertionError:#assert with Pk none.
+                        continue
         # Attempt to revert all revisions.
         versions = [version for version in version_set if version.type != VERSION_DELETE]
         safe_revert(versions)
