@@ -110,7 +110,7 @@ class Revision(models.Model):
                                 item.delete()
                         else:
                             item.delete()
-                    except ObjectDoesNotExist, AssertionError:#assert with Pk none.
+                    except (ObjectDoesNotExist, AssertionError):#assert with Pk none.
                         continue
         # Attempt to revert all revisions.
         versions = [version for version in version_set if version.type != VERSION_DELETE]
