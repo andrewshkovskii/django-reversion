@@ -1,9 +1,4 @@
-{% extends "asterisk/asterisk.html" %}
-{% load static from staticfiles %}
-{% block title %} {{ model_verbose_name }} / {{ template_header }} {% endblock %}
-{% block main_content_header %}{{ template_header }}{% endblock %}
-{% block main_content_inner %}
-    <table class="table table-stripper datatables_target">
+<table >
         <thead>
         <tr>
             <th>#</th>
@@ -20,21 +15,7 @@
                 <td> {{ revision_entry.date_created }}</td>
                 <td> {{ revision_entry.user_string }}</td>
                 <td class='revision-comment' title="{{ revision_entry.comment }}"> {{ revision_entry.comment|truncatechars:50  }}</td>
-                <td>
-                    {% if not forloop.first	 %}
-                        <a title = "Восстановить ревизию" href="{% url asterisk_revision_revert revision_entry.pk %}">
-                            <i class='icon-share-alt'></i></a></br>
-                    {% else %}
-                        <strong>Текущая ревизия</strong>
-                    {% endif %}
-                </td>
             </tr>
         {% endfor %}
         </tbody>
     </table>
-
-{% endblock %}
-{% block js %}
-    {{ block.super }}
-    <script src="{% static "js/ip_pbx_reversion/revision_list_comments_tooltip.js" %}"></script>
-{% endblock %}
