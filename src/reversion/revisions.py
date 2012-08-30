@@ -31,7 +31,7 @@ was_created_message = u'Создан {0}.'
 was_deleted_message = u'Удален {0}.'
 
 def get_object_smart_repr(object):
-    return u"{0} {1}".format(unicode(object._meta.verbose_name.capitalize()), unicode(object))
+    return u"{0} {1}".format(unicode(object._meta.verbose_name.capitalize()), unicode(object.__unicode__()))
 
 class VersionAdapter(object):
 
