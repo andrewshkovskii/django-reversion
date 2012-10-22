@@ -1,5 +1,5 @@
 import sys
-sys.path.append('src/reversion')
+sys.path.insert(0, 'src/reversion')
 from distutils.core import setup
 from version import __version__
 
@@ -22,7 +22,7 @@ setup(name="django-reversion",
       author="Dave Hall",
       author_email="dave@etianen.com",
       url="http://github.com/etianen/django-reversion",
-      download_url="http://github.com/downloads/etianen/django-reversion/django-reversion-1.6.2.tar.gz",
+      download_url="http://github.com/downloads/etianen/django-reversion/django-reversion-1.6.3.tar.gz",
       zip_safe=False,
       packages=["reversion", "reversion.management", "reversion.management.commands", "reversion.migrations","reversion.serializer"],
       package_dir={"": "src"},
