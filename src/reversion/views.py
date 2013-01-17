@@ -14,6 +14,7 @@ from reversion.revisions import was_deleted_message, get_object_smart_repr
 import reversion
 
 reversion_does_not_exist_message = u"Ревизия <strong>#{0}</strong> не существует!"
+revert_latest_revision = u"Восстановление текущей ревизии запрещено."
 integrity_error_message = u"При попытке восстановить ревизию {0} произошла ошибка целостности БД."
 has_no_perm_message = u'У Вас нет прав на восстановление данной ревизии.'
 revision_revert_comment_template = u'Восстановление ревизии #{0} от {1} ({2}).'
@@ -72,10 +73,15 @@ class RevisionRevertFormView(FormView, CanRevertRevisionMixin):
                          "error_message" : reversion_does_not_exist_message.format(kwargs.get('pk'))},
                          context_instance = RequestContext(request))
             else:
+                if self.object.pk == self.model.objects.latest("date_created").pk:
+                    return render_to_response("reversion/revision_error.html",
+                                               {'back_url': self.back_url,
+                                                "error_message": revert_latest_revision},
+                                               context_instance = RequestContext(request))
                 return self.render_to_response(self.get_context_data(revision = self.object,
-                    form = self.form_class(),
-                    verbose_name = self.model_on_revision._meta.verbose_name,
-                    back_url = self.back_url))
+                                                form = self.form_class(),
+                                                verbose_name = self.model_on_revision._meta.verbose_name,
+                                                back_url = self.back_url))
         else:
             return render_to_response("reversion/revision_error.html",
                                         {'back_url' :  self.back_url, "error_message":has_no_perm_message},
@@ -85,19 +91,25 @@ class RevisionRevertFormView(FormView, CanRevertRevisionMixin):
         if request.user.has_perm("{0}.can_revert_{1}".format(self.model_on_revision._meta.app_label, self.model_on_revision.__name__)):
             try:
                 self.object = self.get_object()
-                self.object.revert(delete=True)
-                reversion.set_comment(revision_revert_comment_template.format(self.object.pk, _date(self.object.date_created, "d E H:i:s"), self.object.comment))
-                return render_to_response("reversion/revision_revert_success.html",
-                                        {'back_url' : self.back_url, 'revision' : self.object},
-                    context_instance = RequestContext(request))
+                if self.object.pk != self.model.objects.latest("date_created").pk:
+                    self.object.revert(delete=True)
+                    reversion.set_comment(revision_revert_comment_template.format(self.object.pk, _date(self.object.date_created, "d E H:i:s"), self.object.comment))
+                    return render_to_response("reversion/revision_revert_success.html",
+                                            {'back_url' : self.back_url, 'revision' : self.object},
+                                                context_instance = RequestContext(request))
+                else:
+                    return render_to_response("reversion/revision_error.html",
+                                              {'back_url': self.back_url,
+                                               "error_message": revert_latest_revision},
+                                              context_instance = RequestContext(request))
             except Revision.DoesNotExist:
                 return render_to_response("reversion/revision_error.html",
-                                            {'back_url' : self.back_url, 
+                                            {'back_url': self.back_url,
                                             "error_message": reversion_does_not_exist_message.format(kwargs.get('pk'))},
-                    context_instance = RequestContext(request))
+                                            context_instance = RequestContext(request))
             except RevertError:
                 return render_to_response("reversion/revision_error.html",
-                                            {'back_url' : self.back_url, 'error_message' : integrity_error_message.format(kwargs.get('pk'))},
+                                            {'back_url': self.back_url, 'error_message' : integrity_error_message.format(kwargs.get('pk'))},
                                             context_instance = RequestContext(request))
         else:
             return render_to_response("reversion/revision_error.html",
