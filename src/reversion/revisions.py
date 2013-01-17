@@ -14,6 +14,7 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.core.signals import request_finished
 from django.db import models, DEFAULT_DB_ALIAS, connection
 from django.db.models import Q, Max, AutoField
+from django.db.models.loading import get_model
 from django.db.models.fields.related import ManyToManyField, RelatedField
 from django.db.models.query import QuerySet
 from django.db.models.signals import post_save, pre_delete, pre_save, post_delete
@@ -385,6 +386,8 @@ class RevisionManager(object):
         Checks whether the given model has been registered with this revision
         manager.
         """
+        if isinstance(model, basestring):
+            model = get_model(*model.split("."))
         return model in self._registered_models
     
     def get_registered_models(self):
@@ -393,6 +396,8 @@ class RevisionManager(object):
         
     def register(self, model, adapter_cls=VersionAdapter, smart_register = True, **field_overrides):
         """Registers a model with this revision manager."""
+        if isinstance(model, basestring):
+            model = get_model(*model.split("."))
         # Prevent multiple registration.
         if self.is_registered(model):
             raise RegistrationError, "%r has already been registered with django-reversion" % model
@@ -417,12 +422,16 @@ class RevisionManager(object):
 
     def get_adapter(self, model):
         """Returns the registration information for the given model class."""
+        if isinstance(model, basestring):
+            model = get_model(*model.split("."))
         if self.is_registered(model):
             return self._registered_models[model]
         raise RegistrationError, "%r has not been registered with django-reversion" % model
         
     def unregister(self, model):
         """Removes a model from version control."""
+        if isinstance(model, basestring):
+            model = get_model(*model.split("."))
         if not self.is_registered(model):
             raise RegistrationError, "%r has not been registered with django-reversion" % model
         del self._registered_models[model]
@@ -597,6 +606,8 @@ class RevisionManager(object):
         
         The results are returned with the most recent versions first.
         """
+        if isinstance(model, basestring):
+            model = get_model(*model.split("."))
         db = db or DEFAULT_DB_ALIAS
         content_type = ContentType.objects.db_manager(db).get_for_model(model)
         versions = self._get_versions(db).filter(
@@ -653,6 +664,8 @@ class RevisionManager(object):
         
         The results are returned with the most recent versions first.
         """
+        if isinstance(model_class, basestring):
+            model = get_model(*model_class.split("."))
         db = db or DEFAULT_DB_ALIAS
         model_db = model_db or db
         content_type = ContentType.objects.db_manager(db).get_for_model(model_class)
