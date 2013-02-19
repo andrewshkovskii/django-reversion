@@ -22,6 +22,12 @@ from django.core.serializers import deserialize, register_serializer
 from django.contrib.contenttypes.models import ContentType
 from reversion.models import Revision, Version, VERSION_ADD, VERSION_CHANGE, VERSION_DELETE, has_int_pk, deprecated, pre_revision_commit, post_revision_commit
 
+from celery import current_app
+from celery.contrib.methods import task_method
+from celery.utils.log import get_task_logger
+from celery import current_task
+
+logger = get_task_logger(__name__)
 register_serializer('yaml_custom_m2m', "reversion.serializer.yaml_serializer_custom")
 
 was_changed_message = u'Изменен {0}:'
@@ -50,10 +56,16 @@ class VersionAdapter(object):
     # The serialization format to use.
     format = "yaml"
     
-    def __init__(self, model):
+    def __init__(self, model, fields=None, follow=None, exclude=None):
         """Initializes the version adapter."""
         self.model = model
-        
+        if fields:
+            self.fields = fields
+        if follow:
+            self.follow = follow
+        if exclude:
+            self.exclude = exclude
+
     def get_fields_to_serialize(self):
         """Returns an iterable of field names to serialize in the version data."""
         opts = self.model._meta
@@ -126,6 +138,17 @@ class VersionAdapter(object):
             "type": type_flag
         }
 
+    def getstate__(self):
+        return {
+                "format": self.format,
+                "fields": self.fields,
+                "exclude": self.exclude,
+                "follow": self.follow,
+                "model": self.model
+                }
+
+    def __setstate__(self, par_dict):
+        self.__dict__.update(par_dict)
 
 class RevisionManagementError(Exception):
     
@@ -135,7 +158,7 @@ class RevisionManagementError(Exception):
 class RevisionContextManager(local):
     
     """Manages the state of the current revision."""
-    
+
     def __init__(self):
         """Initializes the revision state."""
         self.clear()
@@ -179,7 +202,7 @@ class RevisionContextManager(local):
         or the `create_on_success` decorator.
         """
         self._stack.append(manage_manually)
-    
+
     def end(self):
         """Ends a revision for this thread."""
         self._assert_active()
@@ -189,17 +212,20 @@ class RevisionContextManager(local):
                 if not self.is_invalid():
                     # Save the revision data.
                     for manager, manager_context in self._objects.iteritems():
-                        manager.save_revision(
-                            dict(
+                        manager.save_revision.delay(
+                            objects=dict(
                                 (obj, callable(data) and data() or data)
                                 for obj, data
                                 in manager_context.iteritems()
                             ),
-                            user = self._user,
-                            comment = self._comment,
-                            meta = self._meta,
-                            ignore_duplicates = self._ignore_duplicates,
-                            db = self._db,
+                            user=self._user,
+                            comment=self._comment,
+                            meta=self._meta,
+                            ignore_duplicates=self._ignore_duplicates,
+                            db=self._db,
+                            deleted=self.deleted,
+                            updated=self.updated,
+                            inserted=self.inserted
                         )
             finally:
                 self.clear()
@@ -350,6 +376,13 @@ class RevisionManager(object):
     """Manages the configuration and creation of revisions."""
     
     _created_managers = WeakValueDictionary()
+
+    def __getstate__(self):
+        return {"_registered_models":self._registered_models,
+                "_manager_slug":self._manager_slug}
+
+    def __setstate__(self, par_dict):
+        self.__dict__.update(par_dict)
     
     @classmethod
     def get_created_managers(cls):
@@ -394,7 +427,7 @@ class RevisionManager(object):
         """Returns an iterable of all registered models."""
         return self._registered_models.keys()
         
-    def register(self, model, adapter_cls=VersionAdapter, smart_register = True, **field_overrides):
+    def register(self, model, adapter_cls=VersionAdapter, smart_register=True, **field_overrides):
         """Registers a model with this revision manager."""
         if isinstance(model, basestring):
             model = get_model(*model.split("."))
@@ -406,16 +439,17 @@ class RevisionManager(object):
             raise RegistrationError("Proxy models cannot be used with django-reversion, register the parent class instead")
         # Perform any customization.
         if field_overrides:
-            adapter_cls = type("Custom" + adapter_cls.__name__, (adapter_cls,), field_overrides)
+            adapter_obj = adapter_cls(model=model, **field_overrides)
+        else:
+            adapter_obj = adapter_cls(model)
         # Perform the registration.
-        adapter_obj = adapter_cls(model)
         self._registered_models[model] = adapter_obj
-#        Connect to the post save signal of the model.
+        # Connect to the post save signal of the model.
         post_save.connect(self._post_save_receiver, model)
         pre_delete.connect(self._pre_delete_receiver, model)
         if smart_register:
-            pre_save.connect(self.pre_save_smart_handler,sender = model)
-            post_delete.connect(self.post_delete_smart_handler, sender = model)
+            pre_save.connect(self.pre_save_smart_handler, sender=model)
+            post_delete.connect(self.post_delete_smart_handler, sender=model)
             Permission.objects.get_or_create(codename='can_revert_{0}'.format(model.__name__),
                                              name=u'Can revert {0}'.format(model.__name__),
                                              content_type = ContentType.objects.get(app_label = model._meta.app_label.lower(), model=model.__name__.lower()))
@@ -460,9 +494,13 @@ class RevisionManager(object):
         return Version.objects.using(db).filter(
             revision__manager_slug = self._manager_slug,
         ).select_related("revision")
-        
-    def save_revision(self, objects, ignore_duplicates=False, user=None, comment="", smart=True, meta=(), db=None):
+
+    @current_app.task(name="RevisionManager.save_revision", filter=task_method)
+    def save_revision(self, objects, updated=None, inserted=None, deleted=None, ignore_duplicates=False, user=None, comment="", smart=True, meta=(), db=None):
         """Saves a new revision."""
+        request = current_task.request
+        logger.info("Executing task id {id}, args: {args} kwargs: {kwargs}, retries: {retries}".format(
+            id=request.id, args=request.args, kwargs=request.kwargs, retries=request.retries))
         # Get the db alias.
         db = db or DEFAULT_DB_ALIAS
         # Adapt the objects to a dict.
@@ -500,7 +538,6 @@ class RevisionManager(object):
                 # Save a new revision.
                 if not comment and smart:
                     deleted_comments, inserted_comments, updated_comments = [], [], []
-                    deleted, updated, inserted = self._revision_context_manager.deleted, self._revision_context_manager.updated, self._revision_context_manager.inserted
                     for deleted_instance in deleted:
                         deleted_comments.append(was_deleted_message.format(get_object_smart_repr(deleted_instance)))
                     for inserted_instance in inserted:
@@ -537,18 +574,18 @@ class RevisionManager(object):
                         if change_list:
                             change_list.insert(0, was_changed_message.format(get_object_smart_repr(old_instance_deserialized.object)))
                         inserted_comments.append(saved_without_changes_message.format(get_object_smart_repr(new_instance)) if not change_list else '\n'.join(change_list))
-                    comment = '\n'.join(inserted_comments+updated_comments+deleted_comments)
+                    comment = '\n'.join(inserted_comments + updated_comments + deleted_comments)
                 revision = Revision(
-                    manager_slug = self._manager_slug,
-                    user = user,
-                    user_string = u"{0} {1} ({2})".format(user.last_name, user.first_name, user.username) if user else "",
-                    comment = comment,
+                    manager_slug=self._manager_slug,
+                    user=user,
+                    user_string=u"{0} {1} ({2})".format(user.last_name, user.first_name, user.username) if user else "",
+                    comment=comment,
                 )
                 # Send the pre_revision_commit signal.
                 pre_revision_commit.send(self,
-                    instances = ordered_objects,
-                    revision = revision,
-                    versions = new_versions,
+                    instances=ordered_objects,
+                    revision=revision,
+                    versions=new_versions,
                 )
                 # Save the revision.
                 revision.save(using=db)

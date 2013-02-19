@@ -101,12 +101,12 @@ class RevisionRevertFormView(FormView, CanRevertRevisionMixin):
                     return render_to_response("reversion/revision_error.html",
                                               {'back_url': self.back_url,
                                                "error_message": revert_latest_revision},
-                                              context_instance = RequestContext(request))
+                                              context_instance=RequestContext(request))
             except Revision.DoesNotExist:
                 return render_to_response("reversion/revision_error.html",
                                             {'back_url': self.back_url,
                                             "error_message": reversion_does_not_exist_message.format(kwargs.get('pk'))},
-                                            context_instance = RequestContext(request))
+                                            context_instance=RequestContext(request))
             except RevertError:
                 return render_to_response("reversion/revision_error.html",
                                             {'back_url': self.back_url, 'error_message' : integrity_error_message.format(kwargs.get('pk'))},
