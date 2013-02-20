@@ -106,12 +106,12 @@ class VersionAdapter(object):
         """Returns the serialization format to use."""
         return self.format
         
-    def get_serialized_data(self, obj, format = None):
+    def get_serialized_data(self, obj, format=None):
         """Returns a string of serialized data for the given obj."""
         return serializers.serialize(
             self.get_serialization_format() if not format else format ,
             (obj,),
-            fields = list(self.get_fields_to_serialize()),
+            fields=list(self.get_fields_to_serialize()),
         )
         
     def get_version_data(self, obj, type_flag, db=None):
@@ -126,7 +126,7 @@ class VersionAdapter(object):
         object_repr = None
         try:
             object_repr = unicode(obj)
-        except :
+        except:
             object_repr = u"Error occurred while unicoding object"
         return {
             "object_id": object_id,
@@ -761,7 +761,7 @@ class RevisionManager(object):
     def pre_save_smart_handler(self, sender, instance, **kwargs):
         if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() and not kwargs['raw']:
             if instance.pk:
-                self._revision_context_manager.add_updated(self.get_adapter(instance.__class__).get_serialized_data(sender.objects.get(pk = instance.pk), 'yaml_custom_m2m'))
+                self._revision_context_manager.add_updated(self.get_adapter(instance.__class__).get_serialized_data(sender.objects.get(pk=instance.pk), 'yaml_custom_m2m'))
             else:
                 self._revision_context_manager.add_inserted(instance)
 

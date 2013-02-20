@@ -21,6 +21,7 @@ SUPPORTED_DJANGO_VERSIONS = (
     (1, 4, 1),
     (1, 4, 2),
     (1, 4, 3),
+    (1, 4, 4),
 )
 
 def check_django_version():
