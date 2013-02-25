@@ -10,7 +10,7 @@ from reversion.revisions import default_revision_manager, revision_context_manag
 from reversion.admin import VersionAdmin
 from reversion.models import pre_revision_commit, post_revision_commit, reverted
 from reversion.version import __version__
-
+from reversion.views import RevisionsListView, RevisionRevertFormView, ReversionDeleteMixin
 
 VERSION = __version__
 
@@ -41,7 +41,9 @@ set_comment = revision_context_manager.set_comment
 add_meta = revision_context_manager.add_meta
 get_ignore_duplicates = revision_context_manager.get_ignore_duplicates
 set_ignore_duplicates = revision_context_manager.set_ignore_duplicates
-
+add_inserted = revision_context_manager.add_inserted
+add_updated = revision_context_manager.add_updated
+add_deleted = revision_context_manager.add_deleted
 
 # Low level API.
 get_for_object_reference = default_revision_manager.get_for_object_reference
