@@ -450,9 +450,6 @@ class RevisionManager(object):
         if smart_register:
             pre_save.connect(self.pre_save_smart_handler, sender=model)
             post_delete.connect(self.post_delete_smart_handler, sender=model)
-            Permission.objects.get_or_create(codename='can_revert_{0}'.format(model.__name__),
-                                             name=u'Can revert {0}'.format(model.__name__),
-                                             content_type = ContentType.objects.get(app_label = model._meta.app_label.lower(), model=model.__name__.lower()))
 
     def get_adapter(self, model):
         """Returns the registration information for the given model class."""

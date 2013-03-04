@@ -64,7 +64,7 @@ class RevisionRevertFormView(FormView, CanRevertRevisionMixin):
     model_on_revision = None
 
     def get(self, request, *args, **kwargs):
-        if request.user.has_perm("{0}.can_revert_{1}".format(self.model_on_revision._meta.app_label, self.model_on_revision.__name__)):
+        if any(role in [1, 2] for role in request.user.groups.defer("name")):
             try:
                 self.object = self.get_object()
             except Revision.DoesNotExist:
@@ -88,7 +88,7 @@ class RevisionRevertFormView(FormView, CanRevertRevisionMixin):
                                         context_instance = RequestContext(request))
 
     def post(self, request, *args, **kwargs):
-        if request.user.has_perm("{0}.can_revert_{1}".format(self.model_on_revision._meta.app_label, self.model_on_revision.__name__)):
+        if any(role in [1, 2] for role in request.user.groups.defer("name")):
             try:
                 self.object = self.get_object()
                 if self.object.pk != self.model.objects.latest("date_created").pk:
