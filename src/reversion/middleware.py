@@ -1,7 +1,5 @@
 """Middleware used by Reversion."""
 
-from __future__ import unicode_literals
-
 from reversion.revisions import revision_context_manager
 
 

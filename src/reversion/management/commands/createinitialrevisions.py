@@ -1,5 +1,3 @@
-from __future__ import unicode_literals, print_function
-
 from optparse import make_option
 
 from django.core.exceptions import ImproperlyConfigured
@@ -9,7 +7,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.db import models, reset_queries
 from django.utils.importlib import import_module
 from django.utils.datastructures import SortedDict
-from django.utils.encoding import force_text
+from django.utils.encoding import smart_unicode
 
 from reversion import default_revision_manager
 from reversion.models import Version, has_int_pk
@@ -22,7 +20,7 @@ class Command(BaseCommand):
         make_option("--comment",
             action="store",
             dest="comment",
-            default="Initial version.",
+            default=u"Initial version.",
             help='Specify the comment to add to the revisions. Defaults to "Initial version.".'),
         make_option("--batch-size",
             action="store",
@@ -47,7 +45,7 @@ class Command(BaseCommand):
         # if no apps given, use all installed.
         if len(app_labels) == 0:
             for app in models.get_apps ():
-                if not app in app_list:
+                if not app in app_list.keys():
                     app_list[app] = []
                 for model_class in models.get_models(app):
                     if not model_class in app_list[app]:
@@ -64,7 +62,7 @@ class Command(BaseCommand):
                     model_class = models.get_model(app_label, model_label)
                     if model_class is None:
                         raise CommandError("Unknown model: %s.%s" % (app_label, model_label))
-                    if app in app_list:
+                    if app in app_list.keys():
                         if app_list[app] and model_class not in app_list[app]:
                             app_list[app].append(model_class)
                     else:
@@ -74,7 +72,7 @@ class Command(BaseCommand):
                     app_label = label
                     try:
                         app = models.get_app(app_label)
-                        if not app in app_list:
+                        if not app in app_list.keys():
                             app_list[app] = []
                         for model_class in models.get_models(app):
                             if not model_class in app_list[app]:
@@ -115,23 +113,23 @@ class Command(BaseCommand):
             # Save all the versions.
             ids = list(live_objs.values_list(model_class._meta.pk.name, flat=True))
             total = len(ids)
-            for i in range(0, total, batch_size):
+            for i in xrange(0, total, batch_size):
                 chunked_ids = ids[i:i+batch_size]
                 objects = live_objs.in_bulk(chunked_ids)
-                for id, obj in objects.items():
+                for id, obj in objects.iteritems():
                     try:
                         default_revision_manager.save_revision((obj,), comment=comment)
                     except:
-                        print("ERROR: Could not save initial version for %s %s." % (model_class.__name__, obj.pk))
+                        print "ERROR: Could not save initial version for %s %s." % (model_class.__name__, obj.pk)
                         raise
                     created_count += 1
                 reset_queries()
                 if verbosity >= 2:
-                    print("Created %s of %s." % (created_count, total))
+                    print u"Created %s of %s." % (created_count, total)
 
             # Print out a message, if feeling verbose.
             if verbosity >= 2:
-                print("Created %s initial revision(s) for model %s." % (created_count, force_text(model_class._meta.verbose_name)))
+                print u"Created %s initial revision(s) for model %s." % (created_count, smart_unicode(model_class._meta.verbose_name))
         else:
             if verbosity >= 2:
-                print("Model %s is not registered."  % (force_text(model_class._meta.verbose_name)))
+                print u"Model %s is not registered."  % (smart_unicode(model_class._meta.verbose_name))
