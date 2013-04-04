@@ -6,7 +6,6 @@ import operator, sys
 from functools import wraps, reduce
 from threading import local
 from weakref import WeakValueDictionary
-from django.contrib.auth.models import Permission
 from django.core import serializers
 from django.core.exceptions import ObjectDoesNotExist
 from django.core.signals import request_finished
@@ -18,10 +17,9 @@ from django.db.models.query import QuerySet
 from django.core.serializers import deserialize, register_serializer
 from django.contrib.contenttypes.models import ContentType
 from django.db.models.signals import post_save, pre_delete, pre_save, post_delete
-
-from reversion.models import Revision, Version, VERSION_ADD, VERSION_CHANGE, VERSION_DELETE, has_int_pk, deprecated, pre_revision_commit, post_revision_commit
 from django.utils.encoding import force_text
 
+from reversion.models import Revision, Version, VERSION_ADD, VERSION_CHANGE, VERSION_DELETE, has_int_pk, pre_revision_commit, post_revision_commit
 from celery import current_app
 from celery.contrib.methods import task_method
 from celery.utils.log import get_task_logger
