@@ -216,7 +216,7 @@ class Version(models.Model):
     def revert(self):
         """Recovers the model in this version."""
         self.object_version.save()
-    
+
     def __unicode__(self):
         """Returns a unicode representation."""
         return force_text(self.object_repr)

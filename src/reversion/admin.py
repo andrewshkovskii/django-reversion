@@ -1,9 +1,12 @@
 """Admin extensions for django-reversion."""
+
+from __future__ import unicode_literals
+
 from functools import partial
 
 from django import template
 from django.db import models, transaction, connection
-from django.conf.urls.defaults import patterns, url
+from django.conf.urls import patterns, url
 from django.contrib import admin
 from django.contrib.admin import helpers, options
 from django.contrib.admin.util import unquote, quote
@@ -18,7 +21,7 @@ from django.shortcuts import get_object_or_404, render_to_response
 from django.utils.html import mark_safe
 from django.utils.text import capfirst
 from django.utils.translation import ugettext as _
-from django.utils.encoding import force_unicode
+from django.utils.encoding import force_text
 from django.utils.formats import localize
 
 from reversion.models import Revision, Version, has_int_pk, VERSION_ADD, VERSION_CHANGE, VERSION_DELETE
@@ -138,7 +141,7 @@ class VersionAdmin(admin.ModelAdmin):
         self.revision_manager.save_revision(
             self.get_revision_data(request, object, VERSION_ADD),
             user = request.user,
-            comment = _(u"Initial version."),
+            comment = _("Initial version."),
             ignore_duplicates = self.ignore_duplicate_revisions,
             db = self.revision_context_manager.get_db(),
         )
@@ -160,7 +163,7 @@ class VersionAdmin(admin.ModelAdmin):
         self.revision_manager.save_revision(
             self.get_revision_data(request, object, VERSION_DELETE),
             user = request.user,
-            comment = _(u"Deleted %(verbose_name)s.") % {"verbose_name": self.model._meta.verbose_name},
+            comment = _("Deleted %(verbose_name)s.") % {"verbose_name": self.model._meta.verbose_name},
             ignore_duplicates = self.ignore_duplicate_revisions,
             db = self.revision_context_manager.get_db(),
         )
@@ -183,7 +186,7 @@ class VersionAdmin(admin.ModelAdmin):
             "opts": opts,
             "app_label": opts.app_label,
             "module_name": capfirst(opts.verbose_name),
-            "title": _("Recover deleted %(name)s") % {"name": force_unicode(opts.verbose_name_plural)},
+            "title": _("Recover deleted %(name)s") % {"name": force_text(opts.verbose_name_plural)},
             "deleted": deleted,
             "changelist_url": reverse("%s:%s_%s_changelist" % (self.admin_site.name, opts.app_label, opts.module_name)),
         }
@@ -213,18 +216,22 @@ class VersionAdmin(admin.ModelAdmin):
         related_versions = dict([(related_version.object_id, related_version)
                                  for related_version in revision_versions
                                  if ContentType.objects.get_for_id(related_version.content_type_id).model_class() == FormSet.model
-                                 and unicode(related_version.field_dict[fk_name]) == unicode(object_id)])
+                                 and force_text(related_version.field_dict[fk_name]) == force_text(object_id)])
         return related_versions
     
     def _hack_inline_formset_initial(self, FormSet, formset, obj, version, revert, recover):
         """Hacks the given formset to contain the correct initial data."""
+        # if the FK this inline formset represents is not being followed, don't process data for it.
+        # see https://github.com/etianen/django-reversion/issues/222
+        if formset.rel_name not in self.revision_manager.get_adapter(self.model).follow:
+            return
         # Now we hack it to push in the data from the revision!
         initial = []
         related_versions = self.get_related_versions(obj, version, FormSet)
         formset.related_versions = related_versions
         for related_obj in formset.queryset:
-            if unicode(related_obj.pk) in related_versions:
-                initial.append(related_versions.pop(unicode(related_obj.pk)).field_dict)
+            if force_text(related_obj.pk) in related_versions:
+                initial.append(related_versions.pop(force_text(related_obj.pk)).field_dict)
             else:
                 initial_data = model_to_dict(related_obj)
                 initial_data["DELETE"] = True
@@ -236,7 +243,7 @@ class VersionAdmin(admin.ModelAdmin):
             initial.append(initial_row)
         # Reconstruct the forms with the new revision data.
         formset.initial = initial
-        formset.forms = [formset._construct_form(n) for n in xrange(len(initial))]
+        formset.forms = [formset._construct_form(n) for n in range(len(initial))]
         # Hack the formset to force a save of everything.
         def get_changed_data(form):
             return [field.name for field in form.fields]
@@ -294,9 +301,9 @@ class VersionAdmin(admin.ModelAdmin):
                                 setattr(related_obj, field.name, None)
                         related_obj.save()
                     formset.save_m2m()
-                change_message = _(u"Reverted to previous version, saved on %(datetime)s") % {"datetime": localize(version.revision.date_created)}
+                change_message = _("Reverted to previous version, saved on %(datetime)s") % {"datetime": localize(version.revision.date_created)}
                 self.log_change(request, new_object, change_message)
-                self.message_user(request, _(u'The %(model)s "%(name)s" was reverted successfully. You may edit it again below.') % {"model": force_unicode(opts.verbose_name), "name": unicode(obj)})
+                self.message_user(request, _(u'The %(model)s "%(name)s" was reverted successfully. You may edit it again below.') % {"model": force_text(opts.verbose_name), "name": force_text(obj)})
                 # Redirect to the model change form.
                 if revert:
                     return HttpResponseRedirect("../../")
@@ -394,9 +401,9 @@ class VersionAdmin(admin.ModelAdmin):
             raise PermissionDenied
         object_id = unquote(object_id) # Underscores in primary key get quoted to "_5F"
         obj = get_object_or_404(self.model, pk=object_id)
-        version = get_object_or_404(Version, pk=version_id, object_id=unicode(obj.pk))
+        version = get_object_or_404(Version, pk=version_id, object_id=force_text(obj.pk))
         # Generate the context.
-        context = {"title": _("Revert %(name)s") % {"name": force_unicode(self.model._meta.verbose_name)},}
+        context = {"title": _("Revert %(name)s") % {"name": force_text(self.model._meta.verbose_name)},}
         context.update(extra_context or {})
         return self.render_revision_form(request, obj, version, context, revert=True)
     
