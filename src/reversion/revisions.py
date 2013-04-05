@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Revision management for django-reversion."""
 
 from __future__ import unicode_literals
@@ -36,7 +37,7 @@ was_created_message = u'Создан {0}.'
 was_deleted_message = u'Удален {0}.'
 
 def get_object_smart_repr(object):
-    return u"{0} {1}".format(unicode(object._meta.verbose_name.capitalize()), unicode(object.__unicode__()))
+    return u"{0} {1}".format(force_text(object._meta.verbose_name.capitalize()), force_text(object.__unicode__()))
 
 class VersionAdapter(object):
 
@@ -138,15 +139,6 @@ class VersionAdapter(object):
             "object_repr": object_repr,
             "type": type_flag
         }
-
-    def getstate__(self):
-        return {
-                "format": self.format,
-                "fields": self.fields,
-                "exclude": self.exclude,
-                "follow": self.follow,
-                "model": self.model
-                }
 
     def __setstate__(self, par_dict):
         self.__dict__.update(par_dict)
@@ -501,8 +493,9 @@ class RevisionManager(object):
     def save_revision(self, objects, updated=None, inserted=None, deleted=None, ignore_duplicates=False, user=None, comment="", smart=True, meta=(), db=None):
         """Saves a new revision."""
         request = current_task.request
-        logger.info("Executing task id {id}, args: {args} kwargs: {kwargs}, retries: {retries}".format(
-            id=request.id, args=request.args, kwargs=request.kwargs, retries=request.retries))
+        logger.info("Executing task id {id}, args: {args} retries: {retries}".format(
+            id=request.id, args=request.args, retries=request.retries))
+        logger.info(request.kwargs)
         # Get the db alias.
         db = db or DEFAULT_DB_ALIAS
         # Adapt the objects to a dict.

@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Database models used by django-reversion."""
 
 from __future__ import unicode_literals
@@ -109,7 +110,10 @@ class Revision(models.Model):
         
     def __unicode__(self):
         """Returns a unicode representation."""
-        return ", ".join(force_text(version) for version in self.version_set.all())
+        return u"Ревизия {id} от {date} , пользователь {user}".format(id=self.pk, date=self.date_created, user=self.user)
+
+    def __str__(self):
+        return "Ревизия {id} от {date} , пользователь {user}".format(id=self.pk, date=self.date_created, user=self.user)
 
 
 # Version types.
@@ -215,6 +219,9 @@ class Version(models.Model):
     
     def __unicode__(self):
         """Returns a unicode representation."""
+        return force_text(self.object_repr)
+
+    def __str__(self):
         return self.object_repr
 
 
