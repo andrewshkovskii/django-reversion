@@ -55,7 +55,7 @@ class VersionAdapter(object):
     # The serialization format to use.
     format = "yaml"
     
-    def __init__(self, model, fields=None, follow=None, exclude=None):
+    def __init__(self, model, fields=None, follow=None, exclude=None, format=None):
         """Initializes the version adapter."""
         self.model = model
         if fields:
@@ -64,6 +64,8 @@ class VersionAdapter(object):
             self.follow = follow
         if exclude:
             self.exclude = exclude
+        if format:
+            self.format = format
 
     def get_fields_to_serialize(self):
         """Returns an iterable of field names to serialize in the version data."""
