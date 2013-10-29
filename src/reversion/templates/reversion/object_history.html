@@ -23,7 +23,7 @@
                                 <th scope="row"><a href="{{action.url}}">{{action.revision.date_created}}</a></th>
                                 <td>
                                     {% if action.revision.user %}
-                                        {{action.revision.user.username}}
+                                        {{action.revision.user}}
                                         {% if action.revision.user.first_name %} ({{action.revision.user.first_name}} {{action.revision.user.last_name}}){% endif %}
                                     {% endif %}
                                 </td>

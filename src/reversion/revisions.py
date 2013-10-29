@@ -575,7 +575,7 @@ class RevisionManager(object):
                 revision = Revision(
                     manager_slug=self._manager_slug,
                     user=user,
-                    user_string=u"{0} {1} ({2})".format(user.last_name, user.first_name, user.username) if user else "",
+                    user_string=unicode(user) if user else u"",
                     comment=comment,
                 )
                 # Send the pre_revision_commit signal.
