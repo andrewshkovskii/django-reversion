@@ -1,8 +1,6 @@
 import sys
 sys.path.insert(0, 'src/reversion')
 from distutils.core import setup
-from version import __version__
-
 
 # Load in babel support, if available.
 try:
@@ -15,7 +13,7 @@ except ImportError:
     cmdclass = {}
 
 setup(name="django-reversion",
-      version='.'.join(str(x) for x in __version__),
+      version='1.7.1',
       license="BSD",
       description="An extension to the Django web framework that provides comprehensive version control facilities",
       long_description=open("README.rst").read(),
@@ -25,8 +23,8 @@ setup(name="django-reversion",
       zip_safe=False,
       packages=["reversion", "reversion.management", "reversion.management.commands", "reversion.migrations", "reversion.serializer",],
       package_dir={"": "src"},
-      package_data = {"reversion": ["locale/*/LC_MESSAGES/django.*", "templates/reversion/*.html"]},
-      cmdclass = cmdclass,
+      package_data={"reversion": ["locale/*/LC_MESSAGES/django.*", "templates/reversion/*.html"]},
+      cmdclass=cmdclass,
       classifiers=["Development Status :: 5 - Production/Stable",
                    "Environment :: Web Environment",
                    "Intended Audience :: Developers",

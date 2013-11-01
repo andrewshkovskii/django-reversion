@@ -22,7 +22,9 @@ def patch_admin(model, admin_site=None):
         raise NotRegistered, "The model %r has not been registered with the admin site." % model
     # Unregister existing admin class.
     admin_site.unregister(model)
+
     # Register patched admin class.
+
     class PatchedModelAdmin(VersionAdmin, ModelAdmin):
         pass
     admin_site.register(model, PatchedModelAdmin)

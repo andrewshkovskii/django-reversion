@@ -36,8 +36,10 @@ saved_without_changes_message = u"Сохранен без изменений {0}
 was_created_message = u'Создан {0}.'
 was_deleted_message = u'Удален {0}.'
 
+
 def get_object_smart_repr(object):
     return u"{0} {1}".format(force_text(object._meta.verbose_name.capitalize()), force_text(object.__unicode__()))
+
 
 class VersionAdapter(object):
 
@@ -53,7 +55,7 @@ class VersionAdapter(object):
     follow = ()
     
     # The serialization format to use.
-    format = "yaml"
+    format = "yaml_custom_m2m"
     
     def __init__(self, model, fields=None, follow=None, exclude=None, format=None):
         """Initializes the version adapter."""
@@ -101,10 +103,9 @@ class VersionAdapter(object):
                 for related_obj in related.all():
                     yield related_obj
             elif related is not None:
-                raise TypeError("Cannot follow the relationship {relationship}. Expected a model or QuerySet, found {related}".format(
-                    relationship = relationship,
-                    related = related,
-                ))
+                raise TypeError("Cannot follow the relationship {relationship}. "
+                                "Expected a model or QuerySet, found {related}".format(relationship=relationship,
+                                                                                       related=related))
     
     def get_serialization_format(self):
         """Returns the serialization format to use."""
@@ -145,6 +146,7 @@ class VersionAdapter(object):
     def __setstate__(self, par_dict):
         self.__dict__.update(par_dict)
 
+
 class RevisionManagementError(Exception):
     
     """Exception that is thrown when something goes wrong with revision managment."""
@@ -156,6 +158,7 @@ class RevisionContextManager(local):
 
     def __init__(self):
         """Initializes the revision state."""
+        super(RevisionContextManager, self).__init__()
         self.clear()
         # Connect to the request finished signal.
         request_finished.connect(self._request_finished_receiver)
@@ -317,6 +320,7 @@ class RevisionContextManager(local):
     def add_updated(self, serialized_instance):
         self.updated.append(serialized_instance)
 
+
 class RevisionContext(object):
 
     """An individual context for a revision."""
@@ -373,8 +377,8 @@ class RevisionManager(object):
     _created_managers = WeakValueDictionary()
 
     def __getstate__(self):
-        return {"_registered_models":self._registered_models,
-                "_manager_slug":self._manager_slug}
+        return {"_registered_models": self._registered_models,
+                "_manager_slug": self._manager_slug}
 
     def __setstate__(self, par_dict):
         self.__dict__.update(par_dict)
@@ -412,7 +416,7 @@ class RevisionManager(object):
         Checks whether the given model has been registered with this revision
         manager.
         """
-        if isinstance(model, basestring):
+        if isinstance(model, (str, unicode)):
             model = get_model(*model.split("."))
         return model in self._registered_models
     
@@ -422,16 +426,15 @@ class RevisionManager(object):
         
     def register(self, model, adapter_cls=VersionAdapter, smart_register=True, **field_overrides):
         """Registers a model with this revision manager."""
-        if isinstance(model, basestring):
+        if isinstance(model, (str, unicode)):
             model = get_model(*model.split("."))
         # Prevent multiple registration.
         if self.is_registered(model):
-            raise RegistrationError("{model} has already been registered with django-reversion".format(
-                model = model,
-            ))
+            raise RegistrationError("{model} has already been registered with django-reversion".format(model=model,))
         # Prevent proxy models being registered.
         if model._meta.proxy:
-            raise RegistrationError("Proxy models cannot be used with django-reversion, register the parent class instead")
+            raise RegistrationError("Proxy models cannot be used with django-reversion, register the parent class"
+                                    " instead")
         # Perform any customization.
         if field_overrides:
             adapter_obj = adapter_cls(model=model, **field_overrides)
@@ -448,22 +451,18 @@ class RevisionManager(object):
 
     def get_adapter(self, model):
         """Returns the registration information for the given model class."""
-        if isinstance(model, basestring):
+        if isinstance(model, (str, unicode)):
             model = get_model(*model.split("."))
         if self.is_registered(model):
             return self._registered_models[model]
-        raise RegistrationError("{model} has not been registered with django-reversion".format(
-            model = model,
-        ))
+        raise RegistrationError("{model} has not been registered with django-reversion".format(model=model,))
         
     def unregister(self, model):
         """Removes a model from version control."""
-        if isinstance(model, basestring):
+        if isinstance(model, (str, unicode)):
             model = get_model(*model.split("."))
         if not self.is_registered(model):
-            raise RegistrationError("{model} has not been registered with django-reversion".format(
-                model = model,
-            ))
+            raise RegistrationError("{model} has not been registered with django-reversion".format(model=model))
         del self._registered_models[model]
         post_save.disconnect(self._post_save_receiver, model)
         pre_delete.disconnect(self._pre_delete_receiver, model)
@@ -473,6 +472,7 @@ class RevisionManager(object):
     def _follow_relationships(self, objects):
         """Follows all relationships in the given set of objects."""
         followed = set()
+
         def _follow(obj):
             if obj in followed or obj.pk is None:
                 return
@@ -487,12 +487,11 @@ class RevisionManager(object):
     def _get_versions(self, db=None):
         """Returns all versions that apply to this manager."""
         db = db or DEFAULT_DB_ALIAS
-        return Version.objects.using(db).filter(
-            revision__manager_slug = self._manager_slug,
-        ).select_related("revision")
+        return Version.objects.using(db).filter(revision__manager_slug=self._manager_slug,).select_related("revision")
 
-    @current_app.task(name="RevisionManager.save_revision", filter=task_method)
-    def save_revision(self, objects, updated=None, inserted=None, deleted=None, ignore_duplicates=False, user=None, comment="", smart=True, meta=(), db=None):
+    @current_app.task(ignore_result=True, name="RevisionManager.save_revision", filter=task_method)
+    def save_revision(self, objects, updated=None, inserted=None, deleted=None, ignore_duplicates=False, user=None,
+                      comment="", smart=True, meta=(), db=None):
         """Saves a new revision."""
         request = current_task.request
         logger.info("Executing task id {id}, args: {args} retries: {retries}".format(
@@ -520,12 +519,14 @@ class RevisionManager(object):
             save_revision = True
             if ignore_duplicates:
                 # Find the latest revision amongst the latest previous version of each object.
-                subqueries = [Q(object_id=version.object_id, content_type=version.content_type) for version in new_versions]
+                subqueries = [Q(object_id=version.object_id, content_type=version.content_type)
+                              for version in new_versions]
                 subqueries = reduce(operator.or_, subqueries)
                 latest_revision = self._get_versions(db).filter(subqueries).aggregate(Max("revision"))["revision__max"]
                 # If we have a latest revision, compare it to the current revision.
                 if latest_revision is not None:
-                    previous_versions = self._get_versions(db).filter(revision=latest_revision).values_list("serialized_data", flat=True)
+                    previous_versions = (self._get_versions(db).filter(revision=latest_revision)
+                                         .values_list("serialized_data", flat=True))
                     if len(previous_versions) == len(new_versions):
                         all_serialized_data = [version.serialized_data for version in new_versions]
                         if sorted(previous_versions) == sorted(all_serialized_data):
@@ -541,37 +542,75 @@ class RevisionManager(object):
                         #here we must get the instances what was created
                         inserted_comments.append(was_created_message.format(get_object_smart_repr(inserted_instance)))
                     for serialized_updated_instance in updated:
-                        old_instance_deserialized = deserialize(VersionAdapter.format, serialized_updated_instance).next()
+                        old_instance_deserialized = deserialize(VersionAdapter.format,
+                                                                serialized_updated_instance).next()
                         new_instance = None
                         change_list = []
                         for instance in objects:
-                            if old_instance_deserialized.object.__class__ == instance.__class__ and old_instance_deserialized.object.pk == instance.pk :
+                            if (old_instance_deserialized.object.__class__ == instance.__class__
+                                    and old_instance_deserialized.object.pk == instance.pk):
                                 new_instance = instance
                                 break
-                        for field in sorted(new_instance._meta.fields + new_instance._meta.many_to_many, key = lambda x:x.creation_counter):
-                            old_value, new_value = field.value_from_object(old_instance_deserialized.object), field.value_from_object(new_instance)
-                            if not isinstance(field, (AutoField, ManyToManyField)):
-                                if old_value != new_value:
-                                    if isinstance(field, RelatedField):
-                                        change_list.append(changes_template.format(verbose_name = field.verbose_name,
-                                                                            value_from = no_value_message if not old_value else get_object_smart_repr(field.rel.to.objects.get(pk=old_value))
-                                                                            ,value_to = no_value_message if not new_value else get_object_smart_repr(field.rel.to.objects.get(pk=new_value))))
+                        fields = sorted(new_instance._meta.fields + new_instance._meta.many_to_many,
+                                        key=lambda x: x.creation_counter)
+                        exclude_fields = self.get_adapter(new_instance.__class__).exclude
+                        fields = [field for field in fields if field.name not in exclude_fields]
+                        for field in fields:
+                            old_value, new_value = (field.value_from_object(old_instance_deserialized.object),
+                                                    field.value_from_object(new_instance))
+                            # Set false old and new values to None because of next != operator(types..)
+                            if not old_value:
+                                old_value = None
+                            if not new_value:
+                                new_value = None
+                            if old_value != new_value:
+                                if not isinstance(field, (AutoField, ManyToManyField)):
+                                        if isinstance(field, RelatedField):
+                                            if old_value:
+                                                value_from = get_object_smart_repr(field.rel.to.objects.get(pk=old_value))
+                                            else:
+                                                value_from = no_value_message
+                                            if new_value:
+                                                value_to = get_object_smart_repr(field.rel.to.objects.get(pk=new_value))
+                                            else:
+                                                value_to = no_value_message
+                                            change_list.append(changes_template.format(verbose_name=field.verbose_name,
+                                                                                       value_from=value_from,
+                                                                                       value_to=value_to))
+                                        else:
+                                            value_from = old_value if old_value else no_value_message
+                                            value_to = new_value if new_value else no_value_message
+                                            change_list.append(changes_template.format(verbose_name=field.verbose_name,
+                                                                                       value_from=value_from,
+                                                                                       value_to=value_to))
+                                elif isinstance(field, ManyToManyField):
+                                    old_value = old_instance_deserialized.m2m_data[field.name]
+                                    old_value = [int(pk) for pk in old_value] if old_value else old_value
+                                    new_value = [obj.pk for obj in new_value] if new_value else new_value
+                                    if old_value:
+                                        value_from = u", ".join(get_object_smart_repr(field.rel.to.objects.get(pk=m2m_pk))
+                                                                for m2m_pk in old_value)
                                     else:
-                                        change_list.append(changes_template.format(verbose_name = field.verbose_name,
-                                                                            value_from = old_value if old_value else no_value_message,
-                                                                            value_to =  new_value if new_value else no_value_message))
-                            elif isinstance(field, ManyToManyField):
-                                old_value = old_instance_deserialized.m2m_data[field.name]
-                                old_value = [int(pk) for pk in old_value] if old_value else old_value
-                                new_value = [obj.pk for obj in new_value] if new_value else new_value
-                                if old_value != new_value:
-                                    change_list.append(changes_template.format(verbose_name = field.verbose_name,
-                                                                            value_from = ', '.join(get_object_smart_repr(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in old_value) if old_value else no_value_message,
-                                                                            value_to =  ', '.join(get_object_smart_repr(field.rel.to.objects.get(pk=m2m_pk)) for m2m_pk in new_value) if new_value else no_value_message))
+                                        value_from = no_value_message
+                                    if new_value:
+                                        value_to = u", ".join(get_object_smart_repr(field.rel.to.objects.get(pk=m2m_pk))
+                                                              for m2m_pk in new_value)
+                                    else:
+                                        value_to = no_value_message
+                                    if old_value != new_value:
+                                        change_list.append(changes_template.format(verbose_name=field.verbose_name,
+                                                                                   value_from=value_from,
+                                                                                   value_to=value_to))
                         if change_list:
-                            change_list.insert(0, was_changed_message.format(get_object_smart_repr(old_instance_deserialized.object)))
-                        inserted_comments.append(saved_without_changes_message.format(get_object_smart_repr(new_instance)) if not change_list else '\n'.join(change_list))
-                    comment = '\n'.join(inserted_comments + updated_comments + deleted_comments)
+                            object_repr = get_object_smart_repr(old_instance_deserialized.object)
+                            change_list.insert(0, was_changed_message.format(object_repr))
+                        if change_list:
+                            inserted_comments_string = u"\n".join(change_list)
+                        else:
+                            new_instance_repr = get_object_smart_repr(new_instance)
+                            inserted_comments_string = saved_without_changes_message.format(new_instance_repr)
+                        inserted_comments.append(inserted_comments_string)
+                    comment = u"\n".join(inserted_comments + updated_comments + deleted_comments)
                 revision = Revision(
                     manager_slug=self._manager_slug,
                     user=user,
@@ -580,10 +619,9 @@ class RevisionManager(object):
                 )
                 # Send the pre_revision_commit signal.
                 pre_revision_commit.send(self,
-                    instances=ordered_objects,
-                    revision=revision,
-                    versions=new_versions,
-                )
+                                         instances=ordered_objects,
+                                         revision=revision,
+                                         versions=new_versions)
                 # Save the revision.
                 revision.save(using=db)
                 # Save version models.
@@ -595,10 +633,9 @@ class RevisionManager(object):
                     cls._default_manager.db_manager(db).create(revision=revision, **kwargs)
                 # Send the pre_revision_commit signal.
                 post_revision_commit.send(self,
-                    instances = ordered_objects,
-                    revision = revision,
-                    versions = new_versions,
-                )
+                                          instances=ordered_objects,
+                                          revision=revision,
+                                          versions=new_versions,)
                 # Return the revision.
                 return revision
     
@@ -610,13 +647,11 @@ class RevisionManager(object):
         
         The results are returned with the most recent versions first.
         """
-        if isinstance(model, basestring):
+        if isinstance(model, (str, unicode)):
             model = get_model(*model.split("."))
         db = db or DEFAULT_DB_ALIAS
         content_type = ContentType.objects.db_manager(db).get_for_model(model)
-        versions = self._get_versions(db).filter(
-            content_type = content_type,
-        ).select_related("revision")
+        versions = self._get_versions(db).filter(content_type=content_type,).select_related("revision")
         if has_int_pk(model):
             # We can do this as a fast, indexed lookup.
             object_id_int = int(object_id)
@@ -668,33 +703,27 @@ class RevisionManager(object):
         
         The results are returned with the most recent versions first.
         """
-        if isinstance(model_class, basestring):
-            model = get_model(*model_class.split("."))
+        if isinstance(model_class, (str, unicode)):
+            model_class = get_model(*model_class.split("."))
         db = db or DEFAULT_DB_ALIAS
         model_db = model_db or db
         content_type = ContentType.objects.db_manager(db).get_for_model(model_class)
         live_pk_queryset = model_class._default_manager.db_manager(model_db).all().values_list("pk", flat=True)
-        versioned_objs = self._get_versions(db).filter(
-            content_type = content_type,
-        )
+        versioned_objs = self._get_versions(db).filter(content_type=content_type)
         if has_int_pk(model_class):
             # If the model and version data are in different databases, decouple the queries.
             if model_db != db:
                 live_pk_queryset = list(live_pk_queryset.iterator())
             # We can do this as a fast, in-database join.
-            deleted_version_pks = versioned_objs.exclude(
-                object_id_int__in = live_pk_queryset
-            ).values_list("object_id_int")
+            deleted_version_pks = (versioned_objs.exclude(object_id_int__in=live_pk_queryset)
+                                   .values_list("object_id_int"))
         else:
             # This join has to be done as two separate queries.
-            deleted_version_pks = versioned_objs.exclude(
-                object_id__in = list(live_pk_queryset.iterator())
-            ).values_list("object_id")
-        deleted_version_pks = deleted_version_pks.exclude(
-            type = VERSION_DELETE,
-        ).annotate(
-            latest_pk = Max("pk")
-        ).values_list("latest_pk", flat=True)
+            deleted_version_pks = (versioned_objs.exclude(object_id__in=list(live_pk_queryset.iterator()))
+                                   .values_list("object_id"))
+        deleted_version_pks = (deleted_version_pks.exclude(type=VERSION_DELETE)
+                               .annotate(latest_pk=Max("pk"))
+                               .values_list("latest_pk", flat=True))
         # HACK: MySQL deals extremely badly with this as a subquery, and can hang infinitely.
         # TODO: If a version is identified where this bug no longer applies, we can add a version specifier.
         if connection.vendor == "mysql":
@@ -706,12 +735,14 @@ class RevisionManager(object):
         
     def _post_save_receiver(self, instance, created, **kwargs):
         """Adds registered models to the current revision, if any."""
-        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() :
+        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually():
             adapter = self.get_adapter(instance.__class__)
             if created:
-                version_data = lambda: adapter.get_version_data(instance, VERSION_ADD, self._revision_context_manager._db)
+                version_data = lambda: adapter.get_version_data(instance, VERSION_ADD,
+                                                                self._revision_context_manager._db)
             else:
-                version_data = lambda: adapter.get_version_data(instance, VERSION_CHANGE, self._revision_context_manager._db)
+                version_data = lambda: adapter.get_version_data(instance, VERSION_CHANGE,
+                                                                self._revision_context_manager._db)
             self._revision_context_manager.add_to_context(self, instance, version_data)
             
     def _pre_delete_receiver(self, instance, **kwargs):
@@ -726,9 +757,13 @@ class RevisionManager(object):
             self._revision_context_manager.add_deleted(instance)
 
     def pre_save_smart_handler(self, sender, instance, **kwargs):
-        if self._revision_context_manager.is_active() and not self._revision_context_manager.is_managing_manually() and not kwargs['raw']:
+        if (self._revision_context_manager.is_active()
+                and not self._revision_context_manager.is_managing_manually()
+                and not kwargs["raw"]):
             if instance.pk:
-                self._revision_context_manager.add_updated(self.get_adapter(instance.__class__).get_serialized_data(sender.objects.get(pk=instance.pk), 'yaml_custom_m2m'))
+                adapter = self.get_adapter(instance.__class__)
+                serialized_data = adapter.get_serialized_data(sender.objects.get(pk=instance.pk), 'yaml_custom_m2m')
+                self._revision_context_manager.add_updated(serialized_data)
             else:
                 self._revision_context_manager.add_inserted(instance)
 

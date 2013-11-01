@@ -17,6 +17,7 @@ from django.dispatch.dispatcher import Signal, _make_id
 from django.utils.translation import ugettext_lazy as _
 from django.utils.encoding import force_text, python_2_unicode_compatible
 
+
 def safe_revert(versions):
     """
     Attempts to revert the given models contained in the give versions.
@@ -49,31 +50,15 @@ class Revision(models.Model):
     
     """A group of related object versions."""
     
-    manager_slug = models.CharField(
-        max_length = 200,
-        db_index = True,
-        default = "default",
-    )
-    
-    date_created = models.DateTimeField(auto_now_add=True,
-                                        verbose_name=_("date created"),
+    manager_slug = models.CharField(max_length=200, db_index=True, default="default")
+    date_created = models.DateTimeField(auto_now_add=True, verbose_name=_("date created"),
                                         help_text="The date and time this revision was created.")
-    
     user = models.ForeignKey(UserModel,
-                             blank=True,
-                             null=True,
-                             verbose_name=_("user"),
+                             blank=True, null=True, verbose_name=_("user"),
                              help_text="The user who created this revision.")
-
-    user_string = models.CharField(max_length=100,
-                            blank=True,
-                            null=True,
-                            verbose_name=("user"),
-                            help_text="The user first name, last name and login who created this revision.")
-    
-    comment = models.TextField(blank=True,
-                               verbose_name=_("comment"),
-                               help_text="A text comment on this revision.")
+    user_string = models.CharField(max_length=100, blank=True, null=True, verbose_name=u"user",
+                                   help_text=u"The user first name, last name and login who created this revision.")
+    comment = models.TextField(blank=True, verbose_name=_("comment"), help_text="A text comment on this revision.")
     
     def revert(self, delete=False):
         """Reverts all objects in this revision."""
@@ -91,7 +76,8 @@ class Revision(models.Model):
                     old_revision[obj] = version
             # Calculate the set of all objects that are in the revision now.
             from reversion.revisions import RevisionManager
-            current_revision = RevisionManager.get_manager(self.manager_slug)._follow_relationships(obj for obj in old_revision.keys() if obj is not None)
+            manager = RevisionManager.get_manager(self.manager_slug)
+            current_revision = manager._follow_relationships(obj for obj in old_revision.keys() if obj is not None)
             # Delete objects that are no longer in the current revision.
             for item in current_revision:
                 if item._get_pk_val():
@@ -101,16 +87,17 @@ class Revision(models.Model):
                                 item.delete()
                         else:
                             item.delete()
-                    except (ObjectDoesNotExist, AssertionError):#assert with Pk none.
+                    except (ObjectDoesNotExist, AssertionError):  # assert with Pk none.
                         continue
         # Attempt to revert all revisions.
         versions = [version for version in version_set if version.type != VERSION_DELETE]
         safe_revert(versions)
-        reverted.send(sender=self, revision = self, versions = versions)
+        reverted.send(sender=self, revision=self, versions=versions)
         
     def __unicode__(self):
         """Returns a unicode representation."""
-        return u"Ревизия {id} от {date} , пользователь {user}".format(id=self.pk, date=self.date_created, user=self.user)
+        return u"Ревизия {id} от {date} , пользователь {user}".format(id=self.pk, date=self.date_created,
+                                                                      user=self.user)
 
     def __str__(self):
         return "Ревизия {id} от {date} , пользователь {user}".format(id=self.pk, date=self.date_created, user=self.user)
@@ -127,6 +114,7 @@ VERSION_TYPE_CHOICES = (
     (VERSION_CHANGE, "Change"),
     (VERSION_DELETE, "Deletion"),
 )
+
 
 def has_int_pk(model):
     """Tests whether the given model has an integer primary key."""
@@ -146,30 +134,22 @@ class Version(models.Model):
     
     """A saved version of a database model."""
     
-    revision = models.ForeignKey(Revision,
-                                 help_text="The revision that contains this version.")
+    revision = models.ForeignKey(Revision, help_text="The revision that contains this version.")
     
     object_id = models.TextField(help_text="Primary key of the model under version control.")
     
-    object_id_int = models.IntegerField(
-        blank = True,
-        null = True,
-        db_index = True,
-        help_text = "An indexed, integer version of the stored model's primary key, used for faster lookups.",
-    )
-    
+    object_id_int = models.IntegerField(blank=True, null=True, db_index=True,
+                                        help_text=("An indexed, integer version of the stored model's primary key, "
+                                                   "used for faster lookups."),)
     content_type = models.ForeignKey(ContentType,
                                      help_text="Content type of the model under version control.")
-    
     # A link to the current instance, not the version stored in this Version!
     object = generic.GenericForeignKey()
-    
     format = models.CharField(max_length=255,
                               help_text="The serialization format used by this model.")
-    
     serialized_data = models.TextField(help_text="The serialized form of this version of the model.")
-    
     object_repr = models.TextField(help_text="A string representation of the object.")
+    type = models.PositiveSmallIntegerField(choices=VERSION_TYPE_CHOICES, db_index=True)
     
     @property
     def object_version(self):
@@ -178,9 +158,7 @@ class Version(models.Model):
         data = force_text(data.encode("utf8"))
         return list(serializers.deserialize(self.format, data, ignorenonexistent=True))[0]
     
-    type = models.PositiveSmallIntegerField(choices=VERSION_TYPE_CHOICES, db_index=True)
-    
-    @property   
+    @property
     def field_dict(self):
         """
         A dictionary mapping field names to field values in this version
@@ -230,10 +208,13 @@ pre_revision_commit = Signal(providing_args=["instances", "revision", "versions"
 post_revision_commit = Signal(providing_args=["instances", "revision", "versions"])
 reverted = Signal(providing_args=['revision', 'versions'])
 
+
 def check_for_receivers(sender, sending_signal, **kwargs):
     """Checks that no other signal receivers have been connected."""
     if len(sending_signal._live_receivers(_make_id(sender))) > 1:
-        warnings.warn("pre_save and post_save signals will not longer be sent for Revision and Version models in django-reversion 1.8. Please use the pre_revision_commit and post_revision_commit signals instead.")
+        warnings.warn("pre_save and post_save signals will not longer be sent for Revision and "
+                      "Version models in django-reversion 1.8. Please use the pre_revision_commit "
+                      "and post_revision_commit signals instead.")
 
 check_for_pre_save_receivers = partial(check_for_receivers, sending_signal=pre_save)
 check_for_post_save_receivers = partial(check_for_receivers, sending_signal=post_save) 

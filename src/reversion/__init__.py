@@ -10,7 +10,6 @@ from reversion.revisions import default_revision_manager, revision_context_manag
 from reversion.admin import VersionAdmin
 from reversion.models import pre_revision_commit, post_revision_commit, reverted
 from reversion.version import __version__
-from reversion.views import RevisionsListView, RevisionRevertFormView, ReversionDeleteMixin
 
 VERSION = __version__
 
